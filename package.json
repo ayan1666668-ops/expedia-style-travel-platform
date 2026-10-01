@@ -1,0 +1,31 @@
+{
+  "name": "voyahub",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Voyahub - Expedia-style self-inventory travel product platform (tickets, hotels, packages, transfers, memberships)",
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@9.12.3",
+  "scripts": {
+    "dev": "pnpm --parallel --filter \"@voyahub/api\" --filter \"@voyahub/web\" dev",
+    "dev:api": "pnpm --filter @voyahub/api dev",
+    "dev:web": "pnpm --filter @voyahub/web dev",
+    "build": "pnpm --filter @voyahub/api build && pnpm --filter @voyahub/web build",
+    "typecheck": "pnpm -r typecheck",
+    "db:generate": "pnpm --filter @voyahub/api db:generate",
+    "db:push": "pnpm --filter @voyahub/api db:push",
+    "db:migrate": "pnpm --filter @voyahub/api db:migrate",
+    "db:seed": "pnpm --filter @voyahub/api db:seed",
+    "db:reset": "pnpm --filter @voyahub/api db:reset",
+    "infra:up": "docker compose up -d",
+    "infra:down": "docker compose down",
+    "setup": "pnpm install && pnpm db:generate && pnpm db:push && pnpm db:seed",
+    "smoke": "bash scripts/smoke-test.sh",
+    "check:mobile": "bash scripts/mobile-check.sh",
+    "verify": "pnpm typecheck && pnpm smoke && pnpm check:mobile"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  }
+}

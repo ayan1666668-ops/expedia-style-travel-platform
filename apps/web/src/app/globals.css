@@ -1,0 +1,1790 @@
+/* ==========================================================================
+   Voyahub design system
+
+   One stylesheet, CSS custom properties, no framework. The visual language is
+   deliberately close to the OTAs shoppers already know: dense result cards,
+   a persistent trust bar, prominent price anchoring and a sticky booking
+   panel. Light and dark are both first-class.
+   ========================================================================== */
+
+:root {
+  /* Brand */
+  --brand-900: #0a2540;
+  --brand-800: #0f3a5f;
+  --brand-700: #14507f;
+  --brand-600: #1a6ba3;
+  --brand-500: #2288c7;
+  --brand-100: #e3f2fb;
+  --brand-50: #f2f9fd;
+
+  --accent-600: #d43f2a;
+  --accent-500: #e8543c;
+  --accent-50: #fef3f1;
+
+  --success-600: #16794a;
+  --success-50: #e9f7f0;
+  --warning-600: #9a5b00;
+  --warning-50: #fff6e5;
+  --critical-600: #b3261e;
+  --critical-50: #fdecea;
+
+  /* Neutrals */
+  --ink-900: #0b1220;
+  --ink-800: #16202f;
+  --ink-700: #2c3a4d;
+  --ink-600: #4a5768;
+  --ink-500: #6b7889;
+  --ink-400: #94a1b2;
+  --ink-300: #c2cbd6;
+  --ink-200: #dfe5ec;
+  --ink-100: #eef2f6;
+  --ink-50: #f6f8fa;
+  --white: #ffffff;
+
+  /* Semantic */
+  --bg: var(--white);
+  --bg-subtle: var(--ink-50);
+  --bg-muted: var(--ink-100);
+  --surface: var(--white);
+  --surface-raised: var(--white);
+  --border: var(--ink-200);
+  --border-strong: var(--ink-300);
+  --text: var(--ink-900);
+  --text-muted: var(--ink-600);
+  --text-subtle: var(--ink-500);
+  --text-inverse: var(--white);
+
+  /* Typography */
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+
+  /* Space */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+  --sp-7: 48px;
+  --sp-8: 64px;
+
+  /* Radius */
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 14px;
+  --r-xl: 20px;
+  --r-full: 999px;
+
+  /* Elevation */
+  --shadow-sm: 0 1px 2px rgba(11, 18, 32, 0.06);
+  --shadow-md: 0 4px 12px rgba(11, 18, 32, 0.08);
+  --shadow-lg: 0 12px 28px rgba(11, 18, 32, 0.12);
+  --shadow-xl: 0 24px 48px rgba(11, 18, 32, 0.16);
+
+  --max-w: 1240px;
+  --header-h: 68px;
+
+  /* --------------------------------------------------------------------------
+     Breakpoints
+     A single scale, referenced by every media query in this file. Inlined
+     (CSS custom properties cannot be used in media queries) but kept here as
+     the source of truth so the numbers stay consistent:
+       --bp-sm: 640px   large phone
+       --bp-md: 860px   tablet / narrow desktop  (layout collapses here)
+       --bp-lg: 1024px  small laptop
+       --bp-xl: 1240px  desktop
+     -------------------------------------------------------------------------- */
+}
+
+/* ==========================================================================
+   Mobile foundation
+   These rules apply at every width — they are not opt-in. They prevent the
+   three classic mobile failures: sideways scrolling, unreadable tap targets,
+   and iOS Safari auto-zooming when a form field receives focus.
+   ========================================================================== */
+
+/* Horizontal overflow anywhere becomes a sideways-scrolling page, which is
+   disorienting and hides content. Components handle their own scrolling (see
+   `.table-scroll`); this is the backstop. */
+html,
+body {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+/* iOS Safari zooms the viewport when a focused input is under 16px. Scaling
+   font-size up on focus keeps the page from jumping. */
+input,
+select,
+textarea {
+  /* 16px minimum, enforced across the board — see the mobile override below
+     for the full-size version. */
+  font-size: 16px;
+}
+
+/* Respect users who ask for less motion. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Keyboard-only users get the ring back; pointer users don't see it. */
+:focus-visible {
+  outline: 2px solid var(--brand-500);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Available to screen readers, invisible until focused. */
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 200;
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--brand-700);
+  color: #fff;
+  font-weight: 700;
+  border-radius: 0 0 var(--r-md) 0;
+}
+
+.skip-link:focus {
+  left: 0;
+}
+
+/* Long URLs, order numbers and email addresses must wrap rather than widen
+   the page. `overflow-wrap: anywhere` (not `break-word`) also breaks inside
+   long unbroken tokens like a 24-character ticket reference. */
+p, td, th, dd, dt, li, .mono {
+  overflow-wrap: anywhere;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0b1220;
+    --bg-subtle: #101a2b;
+    --bg-muted: #16233a;
+    --surface: #131e30;
+    --surface-raised: #1a2739;
+    --border: #26364d;
+    --border-strong: #35485f;
+    --text: #eef3f9;
+    --text-muted: #a8b6c8;
+    --text-subtle: #8494a8;
+
+    --brand-100: #16324a;
+    --brand-50: #122436;
+    --success-50: #10301f;
+    --warning-50: #33260c;
+    --critical-50: #3a1512;
+    --accent-50: #3a1a15;
+
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.45);
+    --shadow-lg: 0 12px 28px rgba(0, 0, 0, 0.5);
+    --shadow-xl: 0 24px 48px rgba(0, 0, 0, 0.55);
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+img {
+  max-width: 100%;
+  display: block;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+}
+
+h1, h2, h3, h4, h5 {
+  margin: 0;
+  line-height: 1.25;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+
+h1 { font-size: 30px; }
+h2 { font-size: 22px; }
+h3 { font-size: 18px; }
+h4 { font-size: 15px; }
+
+p { margin: 0 0 var(--sp-3); }
+p:last-child { margin-bottom: 0; }
+
+/* ==========================================================================
+   Layout primitives
+   ========================================================================== */
+
+.container {
+  width: 100%;
+  max-width: var(--max-w);
+  margin: 0 auto;
+  padding: 0 var(--sp-4);
+}
+
+.stack { display: flex; flex-direction: column; gap: var(--sp-4); }
+.stack-sm { display: flex; flex-direction: column; gap: var(--sp-2); }
+.stack-lg { display: flex; flex-direction: column; gap: var(--sp-6); }
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.row-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+
+.wrap { flex-wrap: wrap; }
+.grow { flex: 1; }
+.spacer { flex: 1; }
+
+.grid { display: grid; gap: var(--sp-4); }
+.grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+/* --------------------------------------------------------------------------
+   Two-column page shells
+   Every page pairs a main column with a rail (filters, booking panel, order
+   summary). These classes replace the per-page inline `width: 320px` hacks so
+   there is exactly one place where the collapse behaviour lives.
+   -------------------------------------------------------------------------- */
+.with-rail {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-5);
+}
+
+.with-rail-main {
+  flex: 1;
+  min-width: 0; /* lets children shrink instead of forcing the page wider */
+}
+
+.with-rail-side {
+  width: 320px;
+  flex-shrink: 0;
+}
+
+/* The booking panel needs a little more room than the default rail because it
+   carries a price breakdown and ticket picker. */
+.with-rail-side-wide { width: 348px; }
+
+@media (max-width: 960px) {
+  .grid-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .grid-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 860px) {
+  /* The rail moves below the main content. */
+  .with-rail {
+    flex-direction: column;
+    gap: var(--sp-4);
+  }
+  .with-rail-side,
+  .with-rail-side-wide {
+    width: 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  .grid-2, .grid-3, .grid-4 { grid-template-columns: minmax(0, 1fr); }
+  h1 { font-size: 24px; }
+  h2 { font-size: 19px; }
+}
+
+/* ==========================================================================
+   Header
+   ========================================================================== */
+
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  height: var(--header-h);
+  display: flex;
+  align-items: center;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+}
+
+.header-inner {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-5);
+  width: 100%;
+  max-width: var(--max-w);
+  margin: 0 auto;
+  padding: 0 var(--sp-4);
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-weight: 800;
+  font-size: 19px;
+  letter-spacing: -0.03em;
+  color: var(--brand-700);
+  flex-shrink: 0;
+}
+
+.logo-mark {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, var(--brand-600), var(--brand-800));
+  color: #fff;
+  font-size: 15px;
+}
+
+.nav {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.nav a:hover { color: var(--brand-600); }
+
+.header-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+/* Mobile navigation toggle. Hidden on desktop where the inline nav is shown. */
+.nav-toggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  margin-right: calc(var(--sp-2) * -1);
+  border: none;
+  background: none;
+  color: var(--text);
+  border-radius: var(--r-md);
+}
+
+.nav-toggle:hover { background: var(--bg-muted); }
+
+.nav-toggle-bars {
+  position: relative;
+  display: block;
+  width: 20px;
+  height: 2px;
+  background: currentColor;
+  border-radius: 2px;
+  transition: background 0.15s ease;
+}
+
+.nav-toggle-bars::before,
+.nav-toggle-bars::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  width: 20px;
+  height: 2px;
+  background: currentColor;
+  border-radius: 2px;
+  transition: transform 0.18s ease;
+}
+
+.nav-toggle-bars::before { top: -6px; }
+.nav-toggle-bars::after { top: 6px; }
+
+/* X state — the middle bar is the background of the element itself. */
+.nav-toggle[aria-expanded='true'] .nav-toggle-bars { background: transparent; }
+.nav-toggle[aria-expanded='true'] .nav-toggle-bars::before { transform: translateY(6px) rotate(45deg); }
+.nav-toggle[aria-expanded='true'] .nav-toggle-bars::after { transform: translateY(-6px) rotate(-45deg); }
+
+/* The dropdown nav on small screens. Hidden by default; `.open` is toggled by
+   the button. `position: static` (not absolute) lets it push page content down
+   instead of covering it, which matters when the menu is taller than the
+   remaining viewport. */
+.nav-mobile {
+  display: none;
+}
+
+@media (max-width: 860px) {
+  .header { height: 60px; }
+
+  .header-inner { gap: var(--sp-3); }
+
+  /* Inline nav has no room next to the logo and account button. */
+  .nav { display: none; }
+
+  .nav-toggle { display: inline-flex; }
+
+  .nav-mobile.open {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: var(--sp-2) 0 var(--sp-3);
+    border-top: 1px solid var(--border);
+  }
+
+  .nav-mobile a {
+    /* 44px keeps every row a comfortable thumb target. */
+    display: flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 0 var(--sp-2);
+    border-radius: var(--r-md);
+    font-size: 15px;
+    font-weight: 550;
+  }
+
+  .nav-mobile a:hover { background: var(--bg-muted); }
+  .nav-mobile a.active { color: var(--brand-700); font-weight: 700; }
+  .nav-mobile a.staff-link { color: var(--brand-700); font-weight: 650; }
+  .nav-mobile button.signout-link { color: var(--critical-600); text-align: left; }
+}
+
+/* The account name can be long; truncate rather than pushing the header wide. */
+.header-account-name {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 400px) {
+  .header-account-name { max-width: 64px; }
+}
+
+/* The header is a flex row; the mobile menu is a sibling that has to sit
+   beneath it and span the full width. */
+@media (max-width: 860px) {
+  .header {
+    flex-wrap: wrap;
+    height: auto;
+    min-height: 60px;
+  }
+
+  .header-inner { min-height: 60px; }
+
+  .nav-mobile {
+    width: 100%;
+    max-width: var(--max-w);
+    margin: 0 auto;
+    padding: 0 var(--sp-4);
+  }
+}
+
+/* Sign-out affordances. The desktop dropdown and the mobile drawer need the
+   same visual treatment, so both are class-driven rather than inline-styled. */
+.account-signout,
+.signout-link {
+  text-align: left;
+  border: none;
+  background: none;
+  font-family: inherit;
+  color: var(--critical-600);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.account-signout {
+  font-size: 13px;
+  padding: 8px 10px;
+  border-radius: var(--r-sm);
+  width: 100%;
+}
+
+.signout-link {
+  font-size: 15px;
+  color: var(--critical-600);
+}
+
+.account-signout:hover,
+.signout-link:hover { background: var(--critical-50); }
+
+/* Language switcher ---------------------------------------------------------
+   A two-state segmented control rather than a <select>: with only two
+   languages, showing both at once makes switching a single tap and keeps the
+   current locale visible without opening anything. */
+
+.locale-switcher {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-full);
+  background: var(--bg-subtle);
+}
+
+.locale-option {
+  padding: 5px 11px;
+  border: none;
+  border-radius: var(--r-full);
+  background: transparent;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 650;
+  line-height: 1.2;
+  cursor: pointer;
+  /* 32px is below the 44px touch guideline, so the control grows on mobile. */
+  min-height: 30px;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.locale-option:hover { color: var(--text); }
+
+.locale-option.active {
+  background: var(--surface);
+  color: var(--brand-700);
+  box-shadow: var(--shadow-sm);
+}
+
+.locale-switcher[data-pending='true'] { opacity: 0.6; }
+
+@media (max-width: 860px) {
+  .locale-option { min-height: 40px; padding: 6px 14px; }
+}
+
+/* ==========================================================================
+   Locale bar
+   Sits above the header and carries the language switcher plus the currency
+   notice. The notice is a compliance habit on EU-facing travel sites — prices
+   should state their currency and tax treatment before the shopper commits.
+   ========================================================================== */
+
+.locale-bar {
+  background: var(--brand-900);
+  color: var(--brand-100);
+  font-size: 12.5px;
+}
+
+.locale-bar-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  min-height: 38px;
+}
+
+.locale-bar-text { opacity: 0.85; }
+
+@media (max-width: 640px) {
+  .locale-bar-text {
+    /* Keeps the switcher reachable without wrapping the bar to two lines. */
+    font-size: 11.5px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+/* ==========================================================================
+   Staff consoles
+   Two independent surfaces (admin, support) sharing one shell. Each gets a
+   distinct accent so an operator on a support handover can tell instantly which
+   system they are acting in.
+
+   The storefront chrome (locale bar, header, footer) is hidden while a console
+   route is mounted. `:has()` on <body> reads the marker the `(console)` layout
+   sets, so the split stays declarative instead of threading a route check
+   through the component tree.
+   ========================================================================== */
+
+body:has(.console-root) .locale-bar,
+body:has(.console-root) .header,
+body:has(.console-root) .footer {
+  display: none;
+}
+
+body:has(.console-root) .skip-link { display: none; }
+
+/* The console owns the full viewport; no storefront padding to fight. */
+body:has(.console-root) main { padding-bottom: 0; }
+
+.console {
+  --console-accent: var(--brand-600);
+  --console-accent-bg: var(--brand-50);
+  display: grid;
+  grid-template-columns: 232px minmax(0, 1fr);
+  min-height: 100vh;
+  background: var(--bg-subtle);
+}
+
+.console-support {
+  --console-accent: #0f766e;
+  --console-accent-bg: #f0fdfa;
+}
+
+.console-nav {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+  padding: var(--sp-4);
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+}
+
+.console-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding-bottom: var(--sp-3);
+  border-bottom: 1px solid var(--border);
+}
+
+.console-links {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.console-link {
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 var(--sp-3);
+  border: none;
+  border-radius: var(--r-md);
+  background: none;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.14s ease, color 0.14s ease;
+}
+
+.console-link:hover { background: var(--bg-muted); color: var(--text); }
+
+.console-link.active {
+  background: var(--console-accent-bg);
+  color: var(--console-accent);
+}
+
+.console-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--border);
+}
+
+.console-main { min-width: 0; display: flex; flex-direction: column; }
+
+.console-header {
+  padding: var(--sp-5) var(--sp-5) var(--sp-4);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.console-header-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  flex-wrap: wrap;
+}
+
+.console-body {
+  padding: var(--sp-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+}
+
+/* The console has its own chrome, so it does not want the storefront header
+   or the locale bar stacked above it. */
+@media (max-width: 860px) {
+  .console { grid-template-columns: minmax(0, 1fr); }
+
+  .console-nav {
+    flex-direction: row;
+    align-items: center;
+    gap: var(--sp-3);
+    overflow-x: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    z-index: 20;
+  }
+
+  .console-brand {
+    border-bottom: none;
+    padding-bottom: 0;
+    flex-shrink: 0;
+  }
+
+  .console-links {
+    flex-direction: row;
+    flex: 1;
+  }
+
+  /* Horizontal rail on a phone — a vertical 232px sidebar would eat the screen. */
+  .console-link { white-space: nowrap; min-height: 44px; }
+
+  .console-foot {
+    flex-direction: row;
+    padding-top: 0;
+    border-top: none;
+    flex-shrink: 0;
+  }
+
+  .console-header, .console-body { padding: var(--sp-4) var(--sp-3); }
+}
+
+/* Two-pane support workspace: a directory on the left, the selected record on
+   the right. Collapses to a single column on a phone, where the directory
+   stacks above the detail rather than competing for width. */
+.support-split {
+  display: grid;
+  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+  gap: var(--sp-4);
+  align-items: start;
+}
+
+@media (max-width: 1024px) {
+  .support-split { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Audit trail diff view. Fixed width and scrollable so a large before/after
+   payload cannot stretch the table and break the surrounding layout. */
+.audit-json {
+  margin: 0;
+  padding: var(--sp-2);
+  max-height: 220px;
+  overflow: auto;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* ==========================================================================
+   Promotional strip (homepage)
+   Content is authored in /admin/promo; this only styles it. Themes map to the
+   same palette as badges so a campaign cannot introduce a new colour system.
+   ========================================================================== */
+
+.promo-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  gap: var(--sp-3);
+  margin: var(--sp-6) 0;
+}
+
+.promo-card {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-4);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  /* Banners are marketing surface — hover lift matches product cards so the
+     interaction vocabulary stays consistent across the page. */
+  transition: box-shadow 0.18s ease, transform 0.18s ease, border-color 0.18s ease;
+}
+
+a.promo-card:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+  border-color: var(--border-strong);
+}
+
+.promo-image {
+  width: 64px;
+  height: 64px;
+  border-radius: var(--r-md);
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.promo-copy { flex: 1; min-width: 0; }
+
+.promo-title {
+  font-size: 15.5px;
+  font-weight: 700;
+  line-height: 1.3;
+  margin: 0;
+}
+
+.promo-body {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 4px 0 0;
+  /* Two lines maximum — a banner that needs three is an article, not a banner. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.promo-cta {
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.promo-brand {
+  background: var(--brand-50);
+  border-color: var(--brand-100);
+}
+.promo-brand .promo-title,
+.promo-brand .promo-cta { color: var(--brand-800); }
+
+.promo-accent { background: var(--accent-50); border-color: var(--accent-50); }
+.promo-accent .promo-title,
+.promo-accent .promo-cta { color: var(--accent-600); }
+
+.promo-success { background: var(--success-50); border-color: var(--success-50); }
+.promo-success .promo-title,
+.promo-success .promo-cta { color: var(--success-600); }
+
+.promo-warning { background: var(--warning-50); border-color: var(--warning-50); }
+.promo-warning .promo-title,
+.promo-warning .promo-cta { color: var(--warning-600); }
+
+.promo-neutral { background: var(--bg-subtle); }
+.promo-neutral .promo-title,
+.promo-neutral .promo-cta { color: var(--text); }
+
+@media (max-width: 640px) {
+  .promo-strip { grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); }
+  .promo-card { padding: var(--sp-3); }
+  .promo-image { width: 48px; height: 48px; }
+}
+
+/* ==========================================================================
+   Buttons
+   ========================================================================== */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  padding: 10px 18px;
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.2;
+  white-space: nowrap;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.06s ease, box-shadow 0.15s ease;
+}
+
+.btn:active:not(:disabled) { transform: translateY(1px); }
+.btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.btn-primary {
+  background: var(--brand-600);
+  color: #fff;
+  box-shadow: var(--shadow-sm);
+}
+.btn-primary:hover:not(:disabled) { background: var(--brand-700); }
+
+.btn-accent {
+  background: var(--accent-600);
+  color: #fff;
+}
+.btn-accent:hover:not(:disabled) { background: var(--accent-500); }
+
+.btn-secondary {
+  background: var(--surface);
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+.btn-secondary:hover:not(:disabled) { background: var(--bg-muted); }
+
+.btn-ghost {
+  background: transparent;
+  color: var(--text-muted);
+}
+.btn-ghost:hover:not(:disabled) { background: var(--bg-muted); color: var(--text); }
+
+.btn-lg { padding: 14px 26px; font-size: 16px; border-radius: var(--r-lg); }
+.btn-sm { padding: 7px 13px; font-size: 13px; }
+.btn-block { width: 100%; }
+
+/* ==========================================================================
+   Cards & surfaces
+   ========================================================================== */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+}
+
+.card-pad { padding: var(--sp-4); }
+.card-hover { transition: box-shadow 0.18s ease, border-color 0.18s ease, transform 0.18s ease; }
+.card-hover:hover {
+  box-shadow: var(--shadow-md);
+  border-color: var(--border-strong);
+  transform: translateY(-2px);
+}
+
+.panel {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: var(--sp-4);
+}
+
+/* ==========================================================================
+   Badges & pills
+   ========================================================================== */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: var(--r-full);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.badge-positive { background: var(--success-50); color: var(--success-600); }
+.badge-warning { background: var(--warning-50); color: var(--warning-600); }
+.badge-critical { background: var(--critical-50); color: var(--critical-600); }
+.badge-neutral { background: var(--bg-muted); color: var(--text-muted); }
+.badge-brand { background: var(--brand-100); color: var(--brand-700); }
+.badge-accent { background: var(--accent-50); color: var(--accent-600); }
+
+.trust-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  font-weight: 550;
+}
+
+.trust-chip::before {
+  content: '✓';
+  color: var(--success-600);
+  font-weight: 800;
+}
+
+/* --------------------------------------------------------------------------
+   Tier progress bar (loyalty)
+   The bar needs a floor width to be legible; on a phone it stacks under the
+   points total instead of sitting beside it.
+   -------------------------------------------------------------------------- */
+.tier-progress { min-width: 240px; }
+
+@media (max-width: 640px) {
+  .tier-progress {
+    min-width: 0;
+    width: 100%;
+    margin-top: var(--sp-4);
+  }
+}
+
+/* ==========================================================================
+   Forms
+   ========================================================================== */
+
+.field { display: flex; flex-direction: column; gap: var(--sp-2); }
+
+.label {
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--text-muted);
+}
+
+.input,
+.select,
+.textarea {
+  width: 100%;
+  padding: 10px 13px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 14.5px;
+  font-family: inherit;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.input:focus,
+.select:focus,
+.textarea:focus {
+  outline: none;
+  border-color: var(--brand-500);
+  box-shadow: 0 0 0 3px var(--brand-100);
+}
+
+.input::placeholder, .textarea::placeholder { color: var(--text-subtle); }
+
+.select {
+  appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
+                    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: calc(100% - 18px) 50%, calc(100% - 13px) 50%;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  padding-right: 36px;
+}
+
+.error-text { color: var(--critical-600); font-size: 12.5px; font-weight: 550; }
+
+.checkbox-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.checkbox-row input { margin-top: 3px; accent-color: var(--brand-600); }
+
+/* ==========================================================================
+   Product card
+   ========================================================================== */
+
+.product-card {
+  display: grid;
+  grid-template-columns: 232px minmax(0, 1fr) auto;
+  gap: var(--sp-4);
+  padding: var(--sp-4);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  transition: box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.product-card:hover {
+  box-shadow: var(--shadow-md);
+  border-color: var(--border-strong);
+}
+
+.product-media {
+  position: relative;
+  width: 232px;
+  height: 168px;
+  border-radius: var(--r-md);
+  overflow: hidden;
+  background: var(--bg-muted);
+  flex-shrink: 0;
+}
+
+.product-media img { width: 100%; height: 100%; object-fit: cover; }
+
+.product-body { display: flex; flex-direction: column; gap: var(--sp-2); min-width: 0; }
+
+.product-title {
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--text);
+}
+
+.product-card:hover .product-title { color: var(--brand-700); }
+
+.product-price {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: space-between;
+  text-align: right;
+  min-width: 140px;
+}
+
+.price-now { font-size: 19px; font-weight: 800; letter-spacing: -0.02em; }
+.price-was { font-size: 13px; color: var(--text-subtle); text-decoration: line-through; }
+.price-note { font-size: 11.5px; color: var(--text-subtle); }
+
+@media (max-width: 860px) {
+  .product-card { grid-template-columns: 108px minmax(0, 1fr); }
+  .product-media { width: 108px; height: 108px; }
+  .product-price { grid-column: 2; flex-direction: row; align-items: center; text-align: left; }
+}
+
+/* ==========================================================================
+   Rating
+   ========================================================================== */
+
+.rating {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+}
+
+.rating-stars { color: #f5a623; letter-spacing: 0.5px; }
+.rating-score { font-weight: 750; }
+.rating-count { color: var(--text-subtle); }
+
+/* ==========================================================================
+   Trust / info bar
+   ========================================================================== */
+
+.trust-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-5);
+  flex-wrap: wrap;
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--brand-50);
+  border: 1px solid var(--brand-100);
+  border-radius: var(--r-md);
+  font-size: 13px;
+  color: var(--brand-800);
+}
+
+/* ==========================================================================
+   Calendar
+   ========================================================================== */
+
+.calendar { display: flex; flex-direction: column; gap: var(--sp-3); }
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.calendar-head {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-subtle);
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.calendar-day {
+  aspect-ratio: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  font-size: 13px;
+  font-weight: 600;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+
+.calendar-day:hover:not(:disabled) { border-color: var(--brand-500); background: var(--brand-50); }
+.calendar-day:disabled { opacity: 0.35; cursor: not-allowed; }
+.calendar-day.selected { background: var(--brand-600); color: #fff; border-color: var(--brand-600); }
+.calendar-day.limited { border-color: var(--warning-600); }
+
+.calendar-price { font-size: 9px; font-weight: 600; opacity: 0.75; }
+
+/* ==========================================================================
+   Sticky booking panel
+   ========================================================================== */
+
+.booking-panel {
+  position: sticky;
+  top: calc(var(--header-h) + var(--sp-4));
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  padding: var(--sp-5);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-lg);
+}
+
+/* Once the panel falls below the content it should stop sticking, otherwise it
+   floats over the footer on short pages. */
+@media (max-width: 860px) {
+  .booking-panel { position: static; }
+  .booking-panel-col { width: 100%; }
+}
+
+/* ==========================================================================
+   Filter rail (search page)
+   On mobile a 244px sidebar of checkbox groups pushes the results off-screen,
+   so it collapses behind a disclosure button. The form stays in the DOM (it's a
+   plain GET form), so filter links and the chip row keep working without JS.
+   ========================================================================== */
+
+.filter-rail {
+  position: sticky;
+  top: calc(var(--header-h) + var(--sp-4));
+  max-height: calc(100vh - var(--header-h) - var(--sp-6));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.filter-rail-toggle { display: none; }
+
+@media (max-width: 860px) {
+  .filter-rail {
+    position: static;
+    max-height: none;
+    overflow: visible;
+    width: 100%;
+  }
+
+  .filter-rail-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-2);
+    width: 100%;
+    min-height: 48px;
+    padding: var(--sp-3) var(--sp-4);
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r-md);
+    font-size: 14.5px;
+    font-weight: 650;
+    color: var(--text);
+  }
+
+  .filter-rail-toggle::after {
+    content: '';
+    width: 9px;
+    height: 9px;
+    border-right: 2px solid currentColor;
+    border-bottom: 2px solid currentColor;
+    transform: rotate(45deg) translateY(-2px);
+    transition: transform 0.18s ease;
+  }
+
+  .filter-rail-toggle[aria-expanded='true']::after { transform: rotate(-135deg) translateY(-2px); }
+
+  /* The panel only exists visually when expanded on mobile. */
+  .filter-rail:not(.expanded) .filter-rail-body { display: none; }
+
+  .filter-rail-body {
+    margin-top: var(--sp-3);
+    padding: var(--sp-3);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+  }
+}
+
+.ticket-option {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3);
+  border: 1.5px solid var(--border);
+  border-radius: var(--r-md);
+  cursor: pointer;
+  transition: border-color 0.14s ease, background 0.14s ease;
+}
+
+.ticket-option:hover { border-color: var(--brand-500); }
+
+.ticket-option.selected {
+  border-color: var(--brand-600);
+  background: var(--brand-50);
+}
+
+.ticket-option input { accent-color: var(--brand-600); }
+
+.qty-control {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  overflow: hidden;
+}
+
+.qty-control button {
+  width: 38px;
+  height: 38px;
+  border: none;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.qty-control button:hover:not(:disabled) { background: var(--bg-muted); }
+.qty-control button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.qty-control span {
+  min-width: 42px;
+  text-align: center;
+  font-weight: 700;
+  font-size: 15px;
+}
+
+/* ==========================================================================
+   Price summary
+   ========================================================================== */
+
+.price-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  font-size: 14px;
+  padding: var(--sp-1) 0;
+}
+
+.price-row.total {
+  padding-top: var(--sp-3);
+  margin-top: var(--sp-2);
+  border-top: 1px solid var(--border);
+  font-size: 17px;
+  font-weight: 800;
+}
+
+.price-row .label { color: var(--text-muted); font-weight: 500; }
+
+/* ==========================================================================
+   Hero search
+   Four fields side by side on desktop. Below 960px the destination and date
+   drop to a second row rather than being squeezed; below 640px everything
+   stacks full-width and the submit button spans the row.
+   ========================================================================== */
+.hero-search {
+  margin-top: var(--sp-6);
+  padding: var(--sp-3);
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1.2fr) minmax(0, 1fr) auto;
+  gap: var(--sp-2);
+  align-items: center;
+}
+
+@media (max-width: 960px) {
+  .hero-search {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  /* The "what" field keeps the full first row. */
+  .hero-field:first-child { grid-column: 1 / -1; }
+}
+
+@media (max-width: 640px) {
+  .hero-search {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--sp-3);
+  }
+
+  .hero-field:first-child { grid-column: auto; }
+  .hero-submit { width: 100%; }
+}
+
+/* ==========================================================================
+   Ticket pass
+   ========================================================================== */
+
+.ticket-pass {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+}
+
+.ticket-pass-header {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-4);
+  background: linear-gradient(135deg, var(--brand-700), var(--brand-900));
+  color: #fff;
+}
+
+.ticket-pass-body { padding: var(--sp-4); display: flex; gap: var(--sp-4); }
+
+.ticket-perf {
+  height: 22px;
+  background-image: radial-gradient(circle at 11px 11px, transparent 10px, var(--border) 11px);
+  background-size: 22px 22px;
+}
+
+.ticket-qr {
+  width: 128px;
+  height: 128px;
+  padding: 8px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  flex-shrink: 0;
+}
+
+.ticket-qr img { width: 100%; height: 100%; }
+
+/* Download / copy buttons. Centred when the pass stacks on a phone. */
+.ticket-pass-actions { justify-content: flex-start; }
+
+@media (max-width: 640px) {
+  .ticket-pass-actions { justify-content: center; }
+}
+
+.ticket-number {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+/* ==========================================================================
+   Tabs
+   ========================================================================== */
+
+.tabs {
+  display: flex;
+  gap: var(--sp-1);
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+}
+
+.tab {
+  padding: var(--sp-3) var(--sp-4);
+  border: none;
+  background: none;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  white-space: nowrap;
+}
+
+.tab:hover { color: var(--text); }
+
+.tab.active {
+  color: var(--brand-700);
+  border-bottom-color: var(--brand-600);
+}
+
+/* ==========================================================================
+   Misc
+   ========================================================================== */
+
+@media (max-width: 860px) {
+  /* The booking panel moves above the ticket rail on the wallet and order
+     pages so a shopper scanning for the QR code finds it first. */
+  .ticket-pass-body { gap: var(--sp-3); }
+
+  /* Inline `gridTemplateColumns: '1fr 1fr'` on stats blocks needs help. */
+  .stats-grid-2 { grid-template-columns: 1fr 1fr; }
+}
+
+/* ==========================================================================
+   Mobile refinements
+   Everything below applies at 640px and under.
+   ========================================================================== */
+@media (max-width: 640px) {
+  /* 16px is the threshold below which iOS Safari zooms on focus. */
+  .input,
+  .select,
+  .textarea,
+  .btn {
+    font-size: 16px;
+  }
+
+  .input,
+  .select,
+  .textarea {
+    /* 48px tall — comfortably above the 44px minimum target. */
+    padding: 13px 14px;
+  }
+
+  .btn { padding: 12px 18px; }
+  .btn-sm { padding: 9px 14px; font-size: 14px; }
+  .btn-lg { padding: 15px 24px; font-size: 17px; }
+
+  /* Roomier cards — a 16px inset feels cramped at this width. */
+  .card-pad { padding: var(--sp-3); }
+  .panel { padding: var(--sp-3); }
+  .booking-panel { padding: var(--sp-4); }
+
+  /* Horizontal rhythm is expensive on a narrow screen. */
+  .container { padding: 0 var(--sp-3); }
+
+  .stack { gap: var(--sp-3); }
+  .stack-lg { gap: var(--sp-5); }
+
+  /* Product cards drop to a single image row above the content. */
+  .product-card {
+    grid-template-columns: 96px minmax(0, 1fr);
+    padding: var(--sp-3);
+    gap: var(--sp-3);
+  }
+
+  .product-media { width: 96px; height: 96px; }
+  .product-title { font-size: 15.5px; }
+  .price-now { font-size: 17px; }
+
+  /* Tables get a comfortable horizontal scroll with a visual affordance. */
+  .table-scroll {
+    /* Bleed to the card edges so the scroll feels continuous. */
+    margin: calc(var(--sp-3) * -1);
+    padding: 0 var(--sp-3);
+  }
+
+  .table { font-size: 13px; }
+  .table th, .table td { padding: var(--sp-2); }
+
+  /* The 128px QR plus text doesn't fit a 320px viewport with padding. */
+  .ticket-pass-body { flex-direction: column; align-items: center; text-align: center; }
+  .ticket-qr { width: 160px; height: 160px; }
+  .ticket-pass-body .row-between { justify-content: center; }
+  .ticket-pass-body .ticket-pass-actions { justify-content: center; }
+
+  /* Calendar cells get tight at 7 columns on a phone. */
+  .calendar-grid { gap: 3px; }
+  .calendar-day { font-size: 12px; border-radius: var(--r-sm); }
+  .calendar-price { font-size: 8px; }
+
+  .trust-bar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--sp-2);
+  }
+
+  /* Tabs scroll horizontally; give them a trailing gap so the last tab isn't
+     flush against the edge. */
+  .tabs { margin: 0 calc(var(--sp-3) * -1); padding: 0 var(--sp-3); }
+  .tab { padding: var(--sp-3); }
+
+  .empty-state { padding: var(--sp-6) var(--sp-3); }
+
+  .footer-grid { grid-template-columns: 1fr; gap: var(--sp-4); }
+
+  /* Modal sheets slide up from the bottom, thumb-reachable. */
+  .modal-backdrop { align-items: flex-end; padding: 0; }
+  .modal {
+    width: 100%;
+    max-width: none;
+    border-radius: var(--r-xl) var(--r-xl) 0 0;
+    padding: var(--sp-4);
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+}
+
+/* Very narrow phones (iPhone SE and below). */
+@media (max-width: 380px) {
+  h1 { font-size: 21px; }
+  .ticket-qr { width: 140px; height: 140px; }
+  .btn { padding: 11px 14px; }
+}
+
+/* --------------------------------------------------------------------------
+   Auto-fit card grids
+   Several components use inline `repeat(auto-fill, minmax(320px, 1fr))`. On a
+   360px phone the available width is less than 320px, so the track overflows
+   the viewport and the whole page scrolls sideways.
+
+   `min(320px, 100%)` caps the track at the container width: one column on a
+   phone, as many as fit above ~700px. This has to be applied to the class
+   rather than the inline style, so the components keep their declarations and
+   only the narrow-screen behaviour is overridden here.
+   -------------------------------------------------------------------------- */
+@media (max-width: 640px) {
+  .grid[style*='minmax(320px'] { grid-template-columns: minmax(0, 1fr); }
+  .grid[style*='minmax(260px'] { grid-template-columns: minmax(0, 1fr); }
+  .grid[style*='minmax(220px'] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .grid[style*='minmax(180px'] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 400px) {
+  /* Below this even two columns is too tight for a KPI card. */
+  .grid[style*='minmax(220px'],
+  .grid[style*='minmax(180px'] { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ==========================================================================
+   Tables
+   Wide data tables (admin, finance) scroll horizontally inside their card
+   rather than stretching the page. The wrapper handles the scrolling so the
+   surrounding layout never has to.
+   ========================================================================== */
+
+/* Gate scanner: the input column leads, stats sit beside it on a tablet and
+   stack underneath on a phone. Staff use this one-handed at a doorway. */
+.scanner-layout { grid-template-columns: minmax(0, 1.4fr) minmax(260px, 1fr); }
+
+@media (max-width: 860px) {
+  .scanner-layout { grid-template-columns: minmax(0, 1fr); }
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+
+.table th {
+  text-align: left;
+  padding: var(--sp-2) var(--sp-3);
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-subtle);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.table td {
+  padding: var(--sp-3);
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+.table tbody tr:last-child td { border-bottom: none; }
+.table tbody tr:hover { background: var(--bg-subtle); }
+.table .right { text-align: right; }
+
+/* The scroll container. `-webkit-overflow-scrolling` is legacy but harmless;
+   `overscroll-behavior` stops the scroll from chaining to the page. */
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+}
+
+.divider { height: 1px; background: var(--border); border: 0; margin: var(--sp-4) 0; }
+
+.muted { color: var(--text-muted); }
+.subtle { color: var(--text-subtle); }
+.small { font-size: 13px; }
+.tiny { font-size: 12px; }
+.bold { font-weight: 700; }
+.mono { font-family: var(--font-mono); }
+.center { text-align: center; }
+.right { text-align: right; }
+.nowrap { white-space: nowrap; }
+.truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-8) var(--sp-4);
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.skeleton {
+  background: linear-gradient(90deg, var(--bg-muted) 25%, var(--border) 37%, var(--bg-muted) 63%);
+  background-size: 400% 100%;
+  animation: shimmer 1.4s ease infinite;
+  border-radius: var(--r-sm);
+}
+
+@keyframes shimmer {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0 50%; }
+}
+
+.footer {
+  margin-top: var(--sp-8);
+  padding: var(--sp-6) 0;
+  border-top: 1px solid var(--border);
+  background: var(--bg-subtle);
+  font-size: 13.5px;
+  color: var(--text-muted);
+}
+
+.footer-grid {
+  display: grid;
+  grid-template-columns: 2fr repeat(3, 1fr);
+  gap: var(--sp-5);
+}
+
+@media (max-width: 860px) {
+  .footer-grid { grid-template-columns: 1fr 1fr; }
+}
+
+/* Sticky bottom bar on mobile for the booking CTA */
+.sticky-cta {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 40;
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--surface-raised);
+  border-top: 1px solid var(--border);
+  box-shadow: 0 -4px 16px rgba(11, 18, 32, 0.1);
+  /* Respect notched devices: without this the bar sits under the home
+     indicator and the primary CTA becomes hard to hit. */
+  padding-bottom: calc(var(--sp-3) + env(safe-area-inset-bottom));
+}
+
+@media (max-width: 860px) {
+  .sticky-cta { display: flex; }
+
+  /* Reserve room for the bar so it never covers the last card or the footer.
+     The extra env() term mirrors the bar's own padding so the gap matches. */
+  body {
+    padding-bottom: calc(76px + env(safe-area-inset-bottom));
+  }
+
+  /* The CTA must win over any open dropdown. */
+  .header,
+  .nav-mobile { z-index: 50; }
+  .sticky-cta { z-index: 60; }
+}
