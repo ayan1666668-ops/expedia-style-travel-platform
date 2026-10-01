@@ -1,0 +1,87 @@
+import { config as loadEnv } from 'dotenv';
+import { resolve } from 'path';
+
+// Load the root .env once, so both `tsx` (dev) and `node dist` (prod) see it.
+loadEnv({ path: resolve(__dirname, '../../../.env') });
+loadEnv({ path: resolve(__dirname, '../../.env') });
+
+function str(key: string, fallback = ''): string {
+  const value = process.env[key];
+  return value === undefined ? fallback : value;
+}
+
+function int(key: string, fallback: number): number {
+  const parsed = Number.parseInt(str(key), 10);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function num(key: string, fallback: number): number {
+  const parsed = Number.parseFloat(str(key));
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+export const config = {
+  env: str('NODE_ENV', 'development'),
+  port: int('API_PORT', 4000),
+  host: str('API_HOST', '0.0.0.0'),
+  publicUrl: str('API_PUBLIC_URL', `http://localhost:${int('API_PORT', 4000)}`),
+
+  databaseUrl: str('DATABASE_URL'),
+
+  redisUrl: str('REDIS_URL'),
+
+  search: {
+    node: str('OPENSEARCH_NODE'),
+    username: str('OPENSEARCH_USERNAME'),
+    password: str('OPENSEARCH_PASSWORD'),
+    index: str('OPENSEARCH_INDEX', 'voyahub-products'),
+    enabled: Boolean(str('OPENSEARCH_NODE')),
+  },
+
+  storage: {
+    endpoint: str('S3_ENDPOINT'),
+    region: str('S3_REGION', 'us-east-1'),
+    bucket: str('S3_BUCKET', 'voyahub-tickets'),
+    accessKeyId: str('S3_ACCESS_KEY_ID'),
+    secretAccessKey: str('S3_SECRET_ACCESS_KEY'),
+    forcePathStyle: str('S3_FORCE_PATH_STYLE', 'true') === 'true',
+    // When no object store is configured we write artefacts to disk so the
+    // ticket/PDF flow stays fully testable in local development.
+    localDir: str('LOCAL_STORAGE_DIR', resolve(__dirname, '../../storage')),
+  },
+
+  payments: {
+    provider: str('PAYMENT_PROVIDER', 'mock'),
+    baseUrl: str('HYPERSWITCH_BASE_URL'),
+    apiKey: str('HYPERSWITCH_API_KEY'),
+    webhookSecret: str('PAYMENT_WEBHOOK_SECRET', 'whsec_dev_change_me'),
+    /** Cards ending in these digits force a decline in the mock gateway. */
+    declineSuffix: str('MOCK_DECLINE_SUFFIX', '0002'),
+    /** Cards ending with these digits force an authorisation failure. */
+    failureSuffix: str('MOCK_FAILURE_SUFFIX', '0119'),
+  },
+
+  booking: {
+    holdMinutes: int('INVENTORY_HOLD_MINUTES', 15),
+    defaultCurrency: str('CURRENCY_DEFAULT', 'USD'),
+    markupBps: int('MARKUP_BPS', 1200),
+    platformFeeBps: int('PLATFORM_FEE_BPS', 1200),
+    taxBps: int('TAX_BPS', 800),
+    checkoutTokenTtlMinutes: int('CHECKOUT_TOKEN_TTL_MINUTES', 20),
+    maxQtyPerOrder: int('MAX_QTY_PER_ORDER', 10),
+  },
+
+  auth: {
+    secret: str('JWT_SECRET', 'dev_jwt_secret_change_me'),
+    expiresIn: str('JWT_EXPIRES_IN', '7d'),
+  },
+
+  site: {
+    url: str('NEXT_PUBLIC_SITE_URL', 'http://localhost:3000'),
+    supportedLocales: ['en-US', 'en-GB', 'fr-FR', 'de-DE', 'es-ES', 'it-IT'],
+    defaultLocale: 'en-US',
+    defaultMarket: str('DEFAULT_MARKET', 'US'),
+  },
+} as const;
+
+export type AppConfig = typeof config;

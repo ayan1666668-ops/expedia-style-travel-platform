@@ -1,0 +1,84 @@
+# ---------------------------------------------------------------------------
+# Voyahub local infrastructure
+#
+#   docker compose up -d                    # Postgres + Redis (required core)
+#   docker compose --profile search up -d   # + OpenSearch
+#   docker compose --profile storage up -d  # + MinIO / S3
+#
+# The API degrades gracefully: search falls back to Postgres FTS and ticket
+# artefacts fall back to the local disk when an object store is unreachable.
+# ---------------------------------------------------------------------------
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: voyahub-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: voyahub
+      POSTGRES_PASSWORD: voyahub
+      POSTGRES_DB: voyahub
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U voyahub -d voyahub"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    container_name: voyahub-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  opensearch:
+    image: opensearchproject/opensearch:2.15.0
+    container_name: voyahub-opensearch
+    restart: unless-stopped
+    profiles: ["search"]
+    environment:
+      discovery.type: single-node
+      plugins.security.disabled: "true"
+      OPENSEARCH_JAVA_OPTS: "-Xms512m -Xmx512m"
+      OPENSEARCH_INITIAL_ADMIN_PASSWORD: "VoyahubDev_2024!"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    ports:
+      - "9200:9200"
+    volumes:
+      - osdata:/usr/share/opensearch/data
+
+  minio:
+    image: minio/minio:latest
+    container_name: voyahub-minio
+    restart: unless-stopped
+    profiles: ["storage"]
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: voyahub
+      MINIO_ROOT_PASSWORD: voyahub-secret
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - miniodata:/data
+
+volumes:
+  pgdata:
+  redisdata:
+  osdata:
+  miniodata:

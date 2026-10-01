@@ -1,0 +1,1485 @@
+// ---------------------------------------------------------------------------
+// Voyahub data model
+//
+// Design principles
+//   1. Money is always integer minor units (cents) + explicit ISO currency.
+//   2. Every sellable thing is a Product -> TicketType (variant) pair, the
+//      same shape used for attraction tickets, hotel rooms, tours and
+//      transfers. That uniformity is what makes a generic booking engine
+//      possible without supplier integrations.
+//   3. Inventory is (ticketType, serviceDate, timeSlot) scoped, tracked with
+//      total/held/sold counters plus an optimistic version column.
+//   4. Prices never mutate. Order items snapshot the full pricing decision
+//      (rule id, unit price, taxes, fees) so historical orders stay auditable.
+//   5. Search-facing tables (searchDocument) are denormalised projections that
+//      can be pushed to OpenSearch without touching transactional state.
+// ---------------------------------------------------------------------------
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ===========================================================================
+// Identity & tenancy
+// ===========================================================================
+
+enum UserRole {
+  CUSTOMER
+  MERCHANT
+  OPERATOR
+  ADMIN
+}
+
+model User {
+  id              String    @id @default(cuid())
+  email           String    @unique
+  passwordHash    String
+  firstName       String
+  lastName        String
+  phone           String?
+  role            UserRole  @default(CUSTOMER)
+  locale          String    @default("en-US")
+  countryCode     String?   @db.Char(2)
+  avatarUrl       String?
+  marketingOptIn  Boolean   @default(false)
+  emailVerifiedAt DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  merchant         Merchant?
+  orders           Order[]
+  reviews          Review[]
+  wishlist         WishlistItem[]
+  loyaltyAccount   LoyaltyAccount?
+  coupons          Coupon[]
+  notifications    Notification[]
+  searchLogs       SearchQueryLog[]
+  travelerProfiles TravelerProfile[]
+  sessions         UserSession[]
+
+  @@index([role])
+}
+
+model UserSession {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ip        String?
+  userAgent String?
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+
+  @@index([userId])
+}
+
+model TravelerProfile {
+  id           String    @id @default(cuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fullName     String
+  email        String?
+  phone        String?
+  dateOfBirth  DateTime? @db.Date
+  documentType String?
+  documentNo   String?
+  nationality  String?   @db.Char(2)
+  isDefault    Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+
+  orderTravelers OrderTraveler[]
+
+  @@index([userId])
+}
+
+// Merchants own inventory in the platform/partner model (stage 2).
+model Merchant {
+  id            String         @id @default(cuid())
+  name          String
+  slug          String         @unique
+  description   String?
+  logoUrl       String?
+  ownerUserId   String?        @unique
+  owner         User?          @relation(fields: [ownerUserId], references: [id])
+  commissionBps Int            @default(1200) // platform take rate in basis points
+  contactEmail  String?
+  contactPhone  String?
+  status        MerchantStatus @default(PENDING)
+  ratingAvg     Float          @default(0)
+  ratingCount   Int            @default(0)
+  countryCode   String?        @db.Char(2)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  products      Product[]
+  ledgerEntries LedgerEntry[]
+  settlements   Settlement[]
+
+  @@index([status])
+}
+
+enum MerchantStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+}
+
+// ===========================================================================
+// Catalogue: destination -> product -> ticket type
+// ===========================================================================
+
+enum DestinationLevel {
+  COUNTRY
+  REGION
+  CITY
+  ATTRACTION
+}
+
+model Destination {
+  id           String           @id @default(cuid())
+  slug         String           @unique
+  name         String
+  level        DestinationLevel
+  parentId     String?
+  parent       Destination?     @relation("DestinationTree", fields: [parentId], references: [id])
+  children     Destination[]    @relation("DestinationTree")
+  countryCode  String?          @db.Char(2)
+  timezone     String           @default("UTC")
+  latitude     Float?
+  longitude    Float?
+  description  String?
+  heroImageUrl String?
+  isPopular    Boolean          @default(false)
+  sortWeight   Int              @default(0)
+  createdAt    DateTime         @default(now())
+
+  products      Product[]
+  neighborhoods Neighborhood[]
+
+  @@index([parentId])
+  @@index([level])
+  @@index([isPopular])
+}
+
+model Neighborhood {
+  id            String      @id @default(cuid())
+  destinationId String
+  destination   Destination @relation(fields: [destinationId], references: [id], onDelete: Cascade)
+  name          String
+  slug          String
+  latitude      Float?
+  longitude     Float?
+  walkMinutes   Int?
+
+  @@unique([destinationId, slug])
+}
+
+enum ProductType {
+  ATTRACTION_TICKET
+  ACTIVITY
+  TOUR
+  DAY_TRIP
+  PACKAGE
+  HOTEL_ROOM
+  TRANSFER
+  VEHICLE_RENTAL
+  GUIDED_TOUR
+  RESTAURANT
+  CRUISE
+  RENTAL_CAR
+}
+
+enum FulfillmentMode {
+  INSTANT_TICKET // e-ticket issued immediately on payment
+  CONFIRMATION // host confirms, ticket issued after
+  ON_SITE_PAYMENT // pay at venue, platform records booking only
+}
+
+enum ProductStatus {
+  DRAFT
+  PUBLISHED
+  PAUSED
+  ARCHIVED
+}
+
+model Product {
+  id            String          @id @default(cuid())
+  slug          String          @unique
+  type          ProductType
+  fulfillment   FulfillmentMode @default(INSTANT_TICKET)
+  status        ProductStatus   @default(DRAFT)
+  merchantId    String?
+  merchant      Merchant?       @relation(fields: [merchantId], references: [id])
+  destinationId String?
+  destination   Destination?    @relation(fields: [destinationId], references: [id])
+
+  latitude     Float?
+  longitude    Float?
+  addressLine  String?
+  meetingPoint String?
+  timezone     String  @default("UTC")
+
+  // Display content is translated per locale (en-US, fr-FR, de-DE, ...).
+  defaultLocale String               @default("en")
+  translations  ProductTranslation[]
+
+  summary    String?
+  highlights String[] @default([])
+  includes   String[] @default([])
+  excludes   String[] @default([])
+  amenities  String[] @default([])
+  audience   String[] @default([])
+
+  instantConfirm       Boolean  @default(true)
+  mobileTicket         Boolean  @default(true)
+  freeCancellation     Boolean  @default(false)
+  languages            String[] @default([])
+  wheelchairAccessible Boolean  @default(false)
+  skipTheLine          Boolean  @default(false)
+  ticketOnly           Boolean  @default(true)
+  durationMinutes      Int?
+  minAge               Int?
+  maxAge               Int?
+
+  // Aggregate rating maintained by the review pipeline.
+  ratingAvg       Float @default(0)
+  ratingCount     Int   @default(0)
+  popularityScore Float @default(0)
+
+  cancellationPolicy CancellationPolicy?
+  addOns             ProductAddOn[]
+
+  ticketTypes    TicketType[]
+  media          ProductMedia[]
+  priceRules     PriceRule[]
+  tags           ProductTag[]
+  reviews        Review[]
+  wishlistItems  WishlistItem[]
+  searchDocument SearchDocument?
+  itineraryItems ItineraryItem[]
+  transferLegs   TransferLeg[]
+  contracts      ProductContract[]
+  availability   AvailabilityCalendar[]
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  publishedAt DateTime?
+
+  @@index([type, status])
+  @@index([destinationId])
+  @@index([merchantId])
+  @@index([status, publishedAt])
+}
+
+model ProductTranslation {
+  id               String   @id @default(cuid())
+  productId        String
+  product          Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  locale           String
+  name             String
+  shortName        String?
+  summary          String?
+  description      String?
+  highlights       String[] @default([])
+  includes         String[] @default([])
+  excludes         String[] @default([])
+  meetingPoint     String?
+  cancellationText String?
+
+  @@unique([productId, locale])
+  @@index([locale])
+}
+
+model ProductMedia {
+  id        String   @id @default(cuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  url       String
+  type      String   @default("image") // image | video
+  altText   String?
+  position  Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([productId, position])
+}
+
+model ProductTag {
+  id        String  @id @default(cuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  slug      String
+  label     String
+
+  @@unique([productId, slug])
+  @@index([slug])
+}
+
+// Contract = per-merchant settlement/product terms.
+model ProductContract {
+  id            String    @id @default(cuid())
+  productId     String
+  product       Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  merchantId    String
+  commissionBps Int
+  validFrom     DateTime
+  validTo       DateTime?
+  terms         String?
+
+  @@index([productId, merchantId])
+}
+
+// ---------------------------------------------------------------------------
+// Ticket types: the actual sellable variants (the "rate" concept)
+// ---------------------------------------------------------------------------
+
+enum InventoryMode {
+  PER_DATE // counts per calendar day (tickets)
+  PER_SLOT // counts per date + start time (activities, transfers)
+  PER_NIGHT // counts per night (hotel rooms)
+  PER_HOUR // counts per date + hour block (vehicle rental)
+  UNLIMITED // no cap
+}
+
+enum InventorySource {
+  PLATFORM
+  MERCHANT_FEED
+  MANUAL
+}
+
+model TicketType {
+  id           String                  @id @default(cuid())
+  productId    String
+  product      Product                 @relation(fields: [productId], references: [id], onDelete: Cascade)
+  code         String                  @unique
+  name         String
+  description  String?
+  translations TicketTypeTranslation[]
+
+  // Money
+  basePriceCents   Int
+  compareAtCents   Int? // strike-through "was" price
+  costCents        Int // net cost used for margin reporting
+  currency         String @default("USD")
+  childPriceCents  Int?
+  infantPriceCents Int?
+
+  taxBps Int @default(0)
+  feeBps Int @default(0)
+
+  // Inventory policy
+  inventoryMode   InventoryMode   @default(PER_DATE)
+  inventorySource InventorySource @default(PLATFORM)
+  maxPerOrder     Int             @default(10)
+  minPerOrder     Int             @default(1)
+  minAge          Int?
+  maxAge          Int?
+
+  isRefundable     Boolean @default(true)
+  isTransferable   Boolean @default(false)
+  requiresPassport Boolean @default(false)
+  active           Boolean @default(true)
+  position         Int     @default(0)
+
+  priceRules   PriceRule[]
+  inventory    InventoryRecord[]
+  cartItems    CartItem[]
+  couponOffers CouponOffer[]
+  addOnLinks   TicketTypeAddOn[]
+  ticketItems  TicketItem[]
+
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+  OrderItem OrderItem[]
+
+  @@index([productId, active])
+}
+
+model TicketTypeTranslation {
+  id           String     @id @default(cuid())
+  ticketTypeId String
+  ticketType   TicketType @relation(fields: [ticketTypeId], references: [id], onDelete: Cascade)
+  locale       String
+  name         String
+  description  String?
+
+  @@unique([ticketTypeId, locale])
+}
+
+model TicketTypeAddOn {
+  ticketTypeId String
+  ticketType   TicketType @relation(fields: [ticketTypeId], references: [id], onDelete: Cascade)
+  addOnId      String
+  addOn        AddOn      @relation(fields: [addOnId], references: [id], onDelete: Cascade)
+
+  @@id([ticketTypeId, addOnId])
+}
+
+model AddOn {
+  id          String  @id @default(cuid())
+  code        String  @unique
+  name        String
+  description String?
+  priceCents  Int
+  currency    String  @default("USD")
+  taxBps      Int     @default(0)
+  maxPerOrder Int     @default(4)
+  active      Boolean @default(true)
+
+  ticketTypes  TicketTypeAddOn[]
+  productLinks ProductAddOn[]
+  orderAddOns  OrderAddOn[]
+}
+
+model ProductAddOn {
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  addOnId   String
+  addOn     AddOn   @relation(fields: [addOnId], references: [id], onDelete: Cascade)
+
+  @@id([productId, addOnId])
+}
+
+// ---------------------------------------------------------------------------
+// Pricing rules: the "dynamic pricing" engine (date, season, lead time, ...)
+// ---------------------------------------------------------------------------
+
+enum PriceRuleKind {
+  BASE
+  DATE_RANGE
+  DAY_OF_WEEK
+  SEASON
+  LEAD_TIME
+  LENGTH_OF_STAY
+  OCCUPANCY
+  QUANTITY_BREAK
+  FLASH_SALE
+  EARLY_BIRD
+}
+
+model PriceRule {
+  id           String      @id @default(cuid())
+  productId    String?
+  product      Product?    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  ticketTypeId String?
+  ticketType   TicketType? @relation(fields: [ticketTypeId], references: [id], onDelete: Cascade)
+
+  kind        PriceRuleKind
+  name        String
+  priority    Int           @default(100) // lower wins
+  // Flexible payload: { from, to }, { days: [1,5] }, { minLeadDays, maxLeadDays },
+  // { minNights, maxNights }, { minOccupancy }, { minQty, discountBps }
+  conditions  Json
+  // { type: "PERCENT_OFF"|"FIXED_OFF"|"MULTIPLY"|"SET", value, maxDiscountCents }
+  adjustment  Json
+  minQuantity Int           @default(1)
+  maxUses     Int?
+  usedCount   Int           @default(0)
+  startsAt    DateTime?
+  endsAt      DateTime?
+  active      Boolean       @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([productId, active])
+  @@index([ticketTypeId, active])
+}
+
+// Multi-currency price lists / regional pricing.
+model PriceList {
+  id            String          @id @default(cuid())
+  code          String          @unique
+  name          String
+  currency      String
+  locale        String?
+  region        String?
+  bpsMultiplier Int             @default(10000) // 10000 = no FX conversion applied
+  validFrom     DateTime?
+  validTo       DateTime?
+  active        Boolean         @default(true)
+  rules         PriceListRule[]
+  createdAt     DateTime        @default(now())
+}
+
+model PriceListRule {
+  id          String    @id @default(cuid())
+  priceListId String
+  priceList   PriceList @relation(fields: [priceListId], references: [id], onDelete: Cascade)
+  productId   String
+  // { ticketTypeCode, amountCents }
+  prices      Json
+
+  @@unique([priceListId, productId])
+}
+
+// ---------------------------------------------------------------------------
+// Cancellation & refund policy (rule engine, evaluated at cancel time)
+// ---------------------------------------------------------------------------
+
+enum RefundOutcome {
+  FULL
+  PARTIAL
+  NONE
+}
+
+model CancellationPolicy {
+  id              String   @id @default(cuid())
+  productId       String   @unique
+  product         Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  refundType      String   @default("REFUND") // REFUND | CREDIT
+  freeCancelHours Int      @default(24)
+  // [{ minHoursBefore, refundBps }] -> highest matching tier wins
+  tiers           Json
+  noShowBps       Int      @default(0)
+  adminFeeCents   Int      @default(0)
+  description     String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// Inventory (per date / slot, with hold semantics)
+// ---------------------------------------------------------------------------
+
+enum InventoryStatus {
+  OPEN
+  SOLD_OUT
+  CLOSED
+}
+
+model InventoryRecord {
+  id            String          @id @default(cuid())
+  ticketTypeId  String
+  ticketType    TicketType      @relation(fields: [ticketTypeId], references: [id], onDelete: Cascade)
+  serviceDate   DateTime        @db.Date
+  // "" = all-day / no time slot. Kept non-null so the composite unique key is
+  // usable from Prisma's typed where API (it cannot express nullable keys).
+  timeSlot      String  @default("") // "09:00", "13:30" or "" for all-day
+  capacityTotal Int
+  capacityHeld  Int             @default(0)
+  capacitySold  Int             @default(0)
+  netPriceCents Int? // merchant net for this date (cost view)
+  status        InventoryStatus @default(OPEN)
+  closedReason  String?
+  version       Int             @default(0) // optimistic lock
+  updatedAt     DateTime        @updatedAt
+
+  holds InventoryHold[]
+
+  @@unique([ticketTypeId, serviceDate, timeSlot])
+  @@index([serviceDate])
+  @@index([status, serviceDate])
+}
+
+// Cached "is there anything bookable on this day" bitmap for calendar UI.
+model AvailabilityCalendar {
+  id            String   @id @default(cuid())
+  productId     String
+  product       Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  serviceDate   DateTime @db.Date
+  status        String // AVAILABLE | LIMITED | SOLD_OUT | CLOSED
+  minPriceCents Int
+  availableQty  Int
+  updatedAt     DateTime @updatedAt
+
+  @@unique([productId, serviceDate])
+  @@index([productId, serviceDate])
+}
+
+// ===========================================================================
+// Search (denormalised projection -> Postgres FTS / OpenSearch)
+// ===========================================================================
+
+model SearchDocument {
+  id               String        @id @default(cuid())
+  productId        String        @unique
+  product          Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  title            String
+  titleAll         String[]      @default([]) // localized titles for n-gram matching
+  summary          String?
+  body             String
+  keywords         String[]      @default([])
+  tags             String[]      @default([])
+  destinationPath  String[]      @default([])
+  countryCode      String?       @db.Char(2)
+  cityName         String?
+  type             ProductType
+  latitude         Float?
+  longitude        Float?
+  ratingAvg        Float         @default(0)
+  ratingCount      Int           @default(0)
+  basePriceCents   Int
+  currency         String        @default("USD")
+  popularityScore  Float         @default(0)
+  instantConfirm   Boolean       @default(true)
+  freeCancellation Boolean       @default(false)
+  skipTheLine      Boolean       @default(false)
+  status           ProductStatus @default(DRAFT)
+  indexedAt        DateTime      @updatedAt
+
+  @@index([type, status])
+  @@index([countryCode])
+}
+
+model SearchQueryLog {
+  id            String       @id @default(cuid())
+  userId        String?
+  user          User?        @relation(fields: [userId], references: [id])
+  query         String?
+  destinationId String?
+  productType   ProductType?
+  serviceDate   DateTime?    @db.Date
+  filters       Json?
+  sort          String?
+  resultCount   Int          @default(0)
+  tookMs        Int          @default(0)
+  createdAt     DateTime     @default(now())
+
+  @@index([createdAt])
+}
+
+// ===========================================================================
+// Cart / checkout holds (pre-order)
+// ===========================================================================
+
+enum CartStatus {
+  OPEN
+  CONVERTED
+  EXPIRED
+  ABANDONED
+}
+
+model Cart {
+  id        String     @id @default(cuid())
+  userId    String?
+  status    CartStatus @default(OPEN)
+  currency  String     @default("USD")
+  locale    String     @default("en-US")
+  promoCode String?
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  items CartItem[]
+  holds InventoryHold[]
+
+  @@index([userId, status])
+}
+
+model CartItem {
+  id             String     @id @default(cuid())
+  cartId         String
+  cart           Cart       @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  productId      String
+  ticketTypeId   String
+  ticketType     TicketType @relation(fields: [ticketTypeId], references: [id])
+  serviceDate    DateTime   @db.Date
+  timeSlot       String?
+  quantity       Int
+  unitPriceCents Int
+  locale         String     @default("en-US")
+
+  createdAt DateTime @default(now())
+
+  @@index([cartId])
+}
+
+// A short-lived claim on inventory, released by the booking engine.
+model InventoryHold {
+  id                String          @id @default(cuid())
+  holdToken         String          @unique
+  cartId            String?
+  cart              Cart?           @relation(fields: [cartId], references: [id])
+  userId            String?
+  inventoryRecordId String
+  inventoryRecord   InventoryRecord @relation(fields: [inventoryRecordId], references: [id])
+  quantity          Int
+  status            String          @default("ACTIVE") // ACTIVE | RELEASED | CONSUMED | EXPIRED
+  expiresAt         DateTime
+  releasedAt        DateTime?
+  createdAt         DateTime        @default(now())
+
+  @@index([status, expiresAt])
+  @@index([userId])
+}
+
+// ===========================================================================
+// Orders
+// ===========================================================================
+
+enum OrderStatus {
+  DRAFT
+  PENDING_PAYMENT // inventory held, awaiting payment
+  PAID
+  CONFIRMED // ticket issued / supplier accepted
+  IN_PROGRESS // being consumed
+  COMPLETED
+  CANCELLED
+  REFUNDED
+  PARTIALLY_REFUNDED
+  EXPIRED
+  FAILED
+}
+
+enum PaymentChannel {
+  CARD
+  APPLE_PAY
+  GOOGLE_PAY
+  PAYPAL
+  APPLE_PAY_JS
+  BANK_TRANSFER
+  WALLET
+  VOUCHER
+  CASH_ON_SITE
+}
+
+enum PaymentStatus {
+  INITIATED
+  REQUIRES_ACTION
+  AUTHORIZED
+  CAPTURED
+  FAILED
+  CANCELLED
+  PARTIALLY_REFUNDED
+  REFUNDED
+}
+
+model Order {
+  id          String      @id @default(cuid())
+  orderNumber String      @unique
+  userId      String?
+  user        User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  status      OrderStatus @default(PENDING_PAYMENT)
+  channel     String      @default("WEB") // WEB | MOBILE | MINI_PROGRAM | PARTNER_API
+  locale      String      @default("en-US")
+  currency    String      @default("USD")
+  market      String      @default("US")
+
+  contactEmail String
+  contactPhone String?
+  customerNote String?
+
+  subtotalCents  Int @default(0)
+  discountCents  Int @default(0)
+  taxCents       Int @default(0)
+  feeCents       Int @default(0)
+  markupCents    Int @default(0)
+  shippingCents  Int @default(0)
+  totalCents     Int @default(0)
+  refundedCents  Int @default(0)
+  pointsRedeemed Int @default(0)
+  pointsEarned   Int @default(0)
+
+  couponId String?
+  coupon   Coupon? @relation(fields: [couponId], references: [id])
+
+  itineraryId String?
+  itinerary   Itinerary? @relation(fields: [itineraryId], references: [id], onDelete: SetNull)
+
+  // Marketing attribution
+  utmSource   String?
+  utmCampaign String?
+  partnerRef  String?
+
+  placedAt    DateTime  @default(now())
+  paidAt      DateTime?
+  confirmedAt DateTime?
+  completedAt DateTime?
+  cancelledAt DateTime?
+  expiresAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  items           OrderItem[]
+  addOns          OrderAddOn[]
+  payments        Payment[]
+  tickets         Ticket[]
+  refunds         Refund[]
+  travelers       OrderTraveler[]
+  reviews         Review[]
+  ledgerEntries   LedgerEntry[]
+  notifications   Notification[]
+  itineraryItems  ItineraryItem[]
+  orderStatusLogs OrderStatusLog[]
+  transferLegs    TransferLeg[]
+
+  @@index([status, placedAt])
+  @@index([userId, placedAt])
+  @@index([contactEmail])
+}
+
+model OrderItem {
+  id           String      @id @default(cuid())
+  orderId      String
+  order        Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId    String
+  productName  String
+  productSlug  String
+  productType  ProductType
+  thumbnailUrl String?
+
+  ticketTypeId   String
+  ticketType     TicketType @relation(fields: [ticketTypeId], references: [id])
+  ticketTypeName String
+  ticketTypeCode String
+
+  serviceDate DateTime @db.Date
+  timeSlot    String?
+  quantity    Int
+  adultCount  Int      @default(0)
+  childCount  Int      @default(0)
+  infantCount Int      @default(0)
+
+  baseUnitPriceCents      Int
+  unitPriceCents          Int
+  compareAtUnitPriceCents Int?
+  ruleTrace               Json? // which price rules fired, for auditability
+  taxBps                  Int   @default(0)
+  taxCents                Int   @default(0)
+  feeCents                Int   @default(0)
+  markupCents             Int   @default(0)
+  lineTotalCents          Int
+
+  refundedQty Int    @default(0)
+  status      String @default("CONFIRMED")
+
+  merchantId            String?
+  merchantCommissionBps Int     @default(0)
+  netAmountCents        Int     @default(0)
+
+  createdAt DateTime @default(now())
+
+  @@index([orderId])
+  @@index([productId])
+  @@index([ticketTypeId])
+}
+
+model OrderAddOn {
+  id             String @id @default(cuid())
+  orderId        String
+  order          Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  addOnId        String
+  addOn          AddOn  @relation(fields: [addOnId], references: [id])
+  name           String
+  quantity       Int    @default(1)
+  unitPriceCents Int
+  totalCents     Int
+}
+
+model OrderTraveler {
+  id                String           @id @default(cuid())
+  orderId           String
+  order             Order            @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  travelerProfileId String?
+  travelerProfile   TravelerProfile? @relation(fields: [travelerProfileId], references: [id])
+  fullName          String
+  email             String?
+  isLead            Boolean          @default(false)
+  details           Json?
+}
+
+model OrderStatusLog {
+  id         String       @id @default(cuid())
+  orderId    String
+  order      Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  fromStatus OrderStatus?
+  toStatus   OrderStatus
+  reason     String?
+  actorId    String?
+  metadata   Json?
+  createdAt  DateTime     @default(now())
+
+  @@index([orderId, createdAt])
+}
+
+// ===========================================================================
+// Payments (Hyperswitch-style router + deterministic mock gateway)
+// ===========================================================================
+
+model Payment {
+  id               String         @id @default(cuid())
+  orderId          String
+  order            Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  provider         String         @default("mock")
+  providerIntentId String?
+  providerChargeId String?
+  method           PaymentChannel @default(CARD)
+  status           PaymentStatus  @default(INITIATED)
+  amountCents      Int
+  refundedCents    Int            @default(0)
+  currency         String         @default("USD")
+  failureCode      String?
+  failureMessage   String?
+  cardBrand        String?
+  cardLast4        String?
+  idempotencyKey   String         @unique
+  capturedAt       DateTime?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  events  PaymentEvent[]
+  refunds Refund[]
+
+  @@index([orderId])
+  @@index([status])
+}
+
+model PaymentEvent {
+  id          String    @id @default(cuid())
+  paymentId   String?
+  payment     Payment?  @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  provider    String
+  eventId     String    @unique
+  type        String
+  payload     Json
+  processedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([type])
+}
+
+model Refund {
+  id               String   @id @default(cuid())
+  orderId          String
+  order            Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  paymentId        String?
+  payment          Payment? @relation(fields: [paymentId], references: [id])
+  amountCents      Int
+  currency         String   @default("USD")
+  reason           String
+  policySnapshot   Json?
+  status           String   @default("SUCCEEDED") // PENDING | SUCCEEDED | FAILED
+  providerRefundId String?
+  idempotencyKey   String   @unique
+  processedAt      DateTime @default(now())
+  createdAt        DateTime @default(now())
+
+  @@index([orderId])
+}
+
+// ===========================================================================
+// Ticketing & redemption
+// ===========================================================================
+
+enum TicketStatus {
+  ISSUED
+  PARTIALLY_REDEEMED
+  REDEEMED
+  VOID
+  EXPIRED
+}
+
+model Ticket {
+  id              String       @id @default(cuid())
+  orderId         String
+  order           Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  ticketNumber    String       @unique
+  productId       String
+  productName     String
+  productSlug     String
+  destinationName String?
+  holderName      String
+  holderEmail     String
+  status          TicketStatus @default(ISSUED)
+  qrPayload       String
+  qrImageUrl      String?
+  pdfUrl          String?
+  barcode         String
+  validFrom       DateTime
+  validTo         DateTime?
+  serviceDate     DateTime     @db.Date
+  timeSlot        String?
+  seatInfo        String?
+  termsUrl        String?
+  issuedAt        DateTime     @default(now())
+  expiresAt       DateTime?
+
+  items     TicketItem[]
+  scans     TicketScan[]
+  transfers TicketTransfer[]
+
+  @@index([orderId])
+  @@index([status])
+  @@index([productId])
+}
+
+model TicketItem {
+  id           String       @id @default(cuid())
+  ticketId     String
+  ticket       Ticket       @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  ticketTypeId String
+  ticketType   TicketType   @relation(fields: [ticketTypeId], references: [id])
+  name         String
+  holderName   String
+  status       TicketStatus @default(ISSUED)
+  redeemedQty  Int          @default(0)
+  scans        TicketScan[]
+}
+
+model TicketScan {
+  id           String      @id @default(cuid())
+  ticketId     String
+  ticket       Ticket      @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  ticketItemId String?
+  ticketItem   TicketItem? @relation(fields: [ticketItemId], references: [id])
+  scannedAt    DateTime    @default(now())
+  gateName     String?
+  deviceId     String?
+  result       String // VALID | ALREADY_USED | INVALID_DATE | WRONG_EVENT | VOID
+  operatorId   String?
+  geoLat       Float?
+  geoLng       Float?
+  note         String?
+
+  @@index([ticketId])
+}
+
+model TicketTransfer {
+  id         String    @id @default(cuid())
+  ticketId   String
+  ticket     Ticket    @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  fromEmail  String
+  toEmail    String
+  token      String    @unique
+  status     String    @default("PENDING")
+  acceptedAt DateTime?
+  expiresAt  DateTime
+  createdAt  DateTime  @default(now())
+}
+
+model VerificationLog {
+  id           String   @id @default(cuid())
+  ticketNumber String
+  result       String
+  ticketId     String?
+  scannedBy    String?
+  createdAt    DateTime @default(now())
+}
+
+// ===========================================================================
+// Coupons / promotions
+// ---------------------------------------------------------------------------
+
+enum DiscountType {
+  PERCENTAGE
+  FIXED_AMOUNT
+  FREE_SHIPPING
+  FREE_ENTRY
+}
+
+model Coupon {
+  id                  String        @id @default(cuid())
+  code                String        @unique
+  description         String?
+  discountType        DiscountType
+  discountValue       Int // percent (bps) or cents depending on type
+  maxDiscountCents    Int?
+  minOrderCents       Int           @default(0)
+  currency            String? // when fixed amount is currency scoped
+  startsAt            DateTime?
+  endsAt              DateTime?
+  usageLimit          Int?
+  usageCount          Int           @default(0)
+  perUserLimit        Int           @default(1)
+  appliesToTypes      ProductType[] @default([])
+  excludesProducts    String[]      @default([])
+  stackable           Boolean       @default(false)
+  pointsMultiplierBps Int           @default(10000)
+  active              Boolean       @default(true)
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  createdById         String?
+  createdBy           User?         @relation(fields: [createdById], references: [id])
+
+  orders      Order[]
+  offers      CouponOffer[]
+  redemptions CouponRedemption[]
+
+  @@index([code, active])
+}
+
+model CouponOffer {
+  couponId     String
+  coupon       Coupon     @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  ticketTypeId String
+  ticketType   TicketType @relation(fields: [ticketTypeId], references: [id], onDelete: Cascade)
+
+  @@id([couponId, ticketTypeId])
+}
+
+model CouponRedemption {
+  id          String   @id @default(cuid())
+  couponId    String
+  coupon      Coupon   @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  orderId     String
+  userId      String?
+  amountCents Int
+  createdAt   DateTime @default(now())
+
+  @@index([couponId, userId])
+  @@index([orderId])
+}
+
+model Promotion {
+  id        String    @id @default(cuid())
+  slug      String    @unique
+  title     String
+  subtitle  String?
+  body      String?
+  bannerUrl String?
+  ctaLabel  String?
+  ctaUrl    String?
+  startsAt  DateTime
+  endsAt    DateTime?
+  position  Int       @default(0)
+  active    Boolean   @default(true)
+  createdAt DateTime  @default(now())
+}
+
+// ===========================================================================
+// Reviews & social proof
+// ===========================================================================
+
+enum ReviewStatus {
+  PENDING
+  PUBLISHED
+  REJECTED
+}
+
+model Review {
+  id                String       @id @default(cuid())
+  productId         String
+  product           Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  userId            String?
+  user              User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  orderId           String?
+  order             Order?       @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  rating            Int
+  title             String?
+  body              String
+  locale            String       @default("en")
+  status            ReviewStatus @default(PUBLISHED)
+  helpfulCount      Int          @default(0)
+  merchantReply     String?
+  merchantRepliedAt DateTime?
+  visitedAt         DateTime?
+  createdAt         DateTime     @default(now())
+
+  media ReviewMedia[]
+
+  @@unique([orderId, productId, userId])
+  @@index([productId, status, createdAt])
+}
+
+model ReviewMedia {
+  id       String @id @default(cuid())
+  reviewId String
+  review   Review @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  url      String
+  position Int    @default(0)
+}
+
+// Distribution buckets used by the reviews tab UI ("Excellent 82%").
+model RatingBreakdown {
+  productId String
+  stars     Int
+  count     Int
+
+  @@id([productId, stars])
+}
+
+// ===========================================================================
+// Loyalty
+// ---------------------------------------------------------------------------
+
+enum LoyaltyTier {
+  MEMBER
+  SILVER
+  GOLD
+  PLATINUM
+}
+
+model LoyaltyAccount {
+  id             String      @id @default(cuid())
+  userId         String      @unique
+  user           User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tier           LoyaltyTier @default(MEMBER)
+  points         Int         @default(0)
+  lifetimePoints Int         @default(0)
+  tierExpiresAt  DateTime?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  transactions LoyaltyTransaction[]
+}
+
+enum LoyaltyTransactionKind {
+  EARN
+  REDEEM
+  EXPIRE
+  ADJUST
+  REVERSAL
+}
+
+model LoyaltyTransaction {
+  id           String                 @id @default(cuid())
+  accountId    String
+  account      LoyaltyAccount         @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  orderId      String?
+  kind         LoyaltyTransactionKind
+  points       Int
+  bps          Int                    @default(10000) // earn rate applied (10000 = 1 pt / cent)
+  balanceAfter Int
+  note         String?
+  expiresAt    DateTime?
+  createdAt    DateTime               @default(now())
+
+  @@index([accountId, createdAt])
+}
+
+// ===========================================================================
+// Wishlist & saved searches
+// ===========================================================================
+
+model WishlistGroup {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  items WishlistItem[]
+
+  @@index([userId])
+}
+
+model WishlistItem {
+  id          String         @id @default(cuid())
+  userId      String
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId   String
+  product     Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
+  groupId     String?
+  group       WishlistGroup? @relation(fields: [groupId], references: [id])
+  serviceDate DateTime?      @db.Date
+  createdAt   DateTime       @default(now())
+
+  @@unique([userId, productId])
+}
+
+model SavedSearch {
+  id                String    @id @default(cuid())
+  userId            String
+  name              String
+  query             String
+  filters           Json?
+  notifyOnPriceDrop Boolean   @default(false)
+  lastNotifiedAt    DateTime?
+  createdAt         DateTime  @default(now())
+
+  @@index([userId])
+}
+
+// ===========================================================================
+// Itinerary (trip planning) & transfers
+// ===========================================================================
+
+model Itinerary {
+  id                 String    @id @default(cuid())
+  userId             String
+  name               String
+  destinationSummary String?
+  startDate          DateTime? @db.Date
+  endDate            DateTime? @db.Date
+  coverUrl           String?
+  totalCents         Int       @default(0)
+  isPublic           Boolean   @default(false)
+  shareToken         String?   @unique
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  items  ItineraryItem[]
+  orders Order[]
+
+  @@index([userId])
+}
+
+model ItineraryItem {
+  id          String    @id @default(cuid())
+  itineraryId String
+  itinerary   Itinerary @relation(fields: [itineraryId], references: [id], onDelete: Cascade)
+  orderId     String?
+  order       Order?    @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  productId   String?
+  product     Product?  @relation(fields: [productId], references: [id], onDelete: SetNull)
+  day         Int
+  position    Int       @default(0)
+  startAt     DateTime?
+  endAt       DateTime?
+  title       String
+  notes       String?
+  costCents   Int       @default(0)
+
+  @@index([itineraryId, day])
+}
+
+model TransferLeg {
+  id              String    @id @default(cuid())
+  orderId         String
+  order           Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId       String?
+  product         Product?  @relation(fields: [productId], references: [id])
+  sequence        Int       @default(0)
+  mode            String // WALKING | DRIVING | TRANSIT | FLIGHT | TRAIN
+  fromName        String
+  fromAddress     String?
+  fromLat         Float?
+  fromLng         Float?
+  toName          String
+  toAddress       String?
+  toLat           Float?
+  toLng           Float?
+  distanceMeters  Int?
+  durationMinutes Int?
+  departAt        DateTime?
+  arriveAt        DateTime?
+  instructions    String?
+}
+
+// ===========================================================================
+// Settlement / ledger (merchant split, reconciliation)
+// ===========================================================================
+
+enum LedgerDirection {
+  CREDIT
+  DEBIT
+}
+
+enum LedgerAccountType {
+  GROSS_SALES
+  TAX_PAYABLE
+  PLATFORM_FEE
+  MARKETING_FEE
+  MERCHANT_PAYABLE
+  REFUNDS
+  CASH
+  PROCESSING_FEE
+}
+
+model LedgerEntry {
+  id          String            @id @default(cuid())
+  orderId     String?
+  order       Order?            @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  merchantId  String?
+  merchant    Merchant?         @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  account     LedgerAccountType
+  direction   LedgerDirection
+  amountCents Int
+  currency    String            @default("USD")
+  description String?
+  reference   String?
+  createdAt   DateTime          @default(now())
+
+  @@index([orderId])
+  @@index([merchantId, createdAt])
+  @@index([account, createdAt])
+}
+
+enum SettlementStatus {
+  PENDING
+  APPROVED
+  PAID
+  FAILED
+}
+
+model Settlement {
+  id          String           @id @default(cuid())
+  merchantId  String
+  merchant    Merchant         @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  periodStart DateTime         @db.Date
+  periodEnd   DateTime         @db.Date
+  grossCents  Int              @default(0)
+  feeCents    Int              @default(0)
+  refundCents Int              @default(0)
+  netCents    Int              @default(0)
+  currency    String           @default("USD")
+  status      SettlementStatus @default(PENDING)
+  paidAt      DateTime?
+  createdAt   DateTime         @default(now())
+
+  @@index([merchantId, periodStart])
+}
+
+// ===========================================================================
+// Notifications & audit
+// ===========================================================================
+
+enum NotificationChannel {
+  EMAIL
+  SMS
+  PUSH
+  IN_APP
+}
+
+enum NotificationStatus {
+  QUEUED
+  SENT
+  FAILED
+  READ
+}
+
+model Notification {
+  id        String              @id @default(cuid())
+  userId    String?
+  user      User?               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orderId   String?
+  order     Order?              @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  channel   NotificationChannel
+  status    NotificationStatus  @default(QUEUED)
+  template  String
+  locale    String              @default("en")
+  subject   String?
+  payload   Json?
+  sentAt    DateTime?
+  readAt    DateTime?
+  createdAt DateTime            @default(now())
+
+  @@index([orderId])
+  @@index([userId, status])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  actorRole  String?
+  action     String
+  entityType String
+  entityId   String?
+  before     Json?
+  after      Json?
+  ip         String?
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
+
+// Daily revenue aggregates powering the operator dashboard.
+model DailyMetric {
+  id               String   @id @default(cuid())
+  date             DateTime @db.Date
+  market           String   @default("US")
+  orders           Int      @default(0)
+  grossCents       Int      @default(0)
+  netCents         Int      @default(0)
+  refundCents      Int      @default(0)
+  platformFeeCents Int      @default(0)
+  newCustomers     Int      @default(0)
+  conversionRate   Float    @default(0)
+  createdAt        DateTime @default(now())
+
+  @@unique([date, market])
+}
