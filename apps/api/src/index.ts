@@ -1,6 +1,7 @@
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
+import websocket from '@fastify/websocket';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { readFile } from 'fs/promises';
 import { basename, join, normalize } from 'path';
@@ -8,6 +9,7 @@ import { config } from './config/env';
 import { logger } from './lib/logger';
 import { checkDatabase, connectDatabase, prisma } from './lib/prisma';
 import { assertSearchEngine } from './modules/search/service';
+import { closeRealtimeBus } from './modules/realtime/bus';
 import { getPaymentGateway } from './modules/payments/gateway';
 import { getRedis } from './utils/redis';
 import { optionalAuth } from './plugins/auth';
@@ -15,10 +17,14 @@ import { registerErrorHandler } from './plugins/error-handler';
 import { adminRoutes } from './routes/admin.routes';
 import { authRoutes } from './routes/auth.routes';
 import { itineraryRoutes, loyaltyRoutes } from './routes/loyalty.routes';
+import { notificationRoutes } from './routes/notifications.routes';
 import { orderRoutes } from './routes/orders.routes';
 import { productRoutes } from './routes/products.routes';
+import { promoRoutes } from './routes/promo.routes';
+import { realtimeRoutes, realtimeStats } from './routes/realtime.routes';
 import { searchRoutes } from './routes/search.routes';
 import { socialRoutes } from './routes/social.routes';
+import { supportRoutes } from './routes/support.routes';
 import { ticketingRoutes } from './routes/ticketing.routes';
 import { releaseExpiredHolds } from './modules/inventory/engine';
 import { expireOrder } from './modules/booking/engine';
@@ -34,12 +40,24 @@ export async function buildServer(): Promise<FastifyInstance> {
   await app.register(helmet, { contentSecurityPolicy: false });
   await app.register(cors, {
     origin: (origin, cb) => {
-      // Allow the configured site plus any localhost dev server.
-      const allowed = [config.site.url, 'http://localhost:3000', 'http://127.0.0.1:3000'];
-      if (!origin || allowed.includes(origin)) return cb(null, true);
-      // Partner APIs and webhooks post without an Origin header; anything
-      // browser-based must match the allowlist.
-      return cb(null, true);
+      // Requests without an Origin header are server-to-server: webhooks, the
+      // mock gateway, curl. Those are not browser requests, so CORS does not
+      // apply to them.
+      if (!origin) return cb(null, true);
+
+      const allowed = [
+        config.site.url,
+        'http://localhost:3000',
+        'http://127.0.0.1:3000',
+        // Public storefront origin (tunnel / reverse proxy). Without this the
+        // page loads but every browser fetch to the API fails CORS.
+        ...(config.publicUrl ? [config.publicUrl] : []),
+      ];
+
+      if (allowed.includes(origin)) return cb(null, true);
+
+      logger.warn('cors.origin_rejected', { origin });
+      return cb(null, false);
     },
     credentials: true,
   });
@@ -56,6 +74,19 @@ export async function buildServer(): Promise<FastifyInstance> {
 
   registerErrorHandler(app);
   await app.register(optionalAuth);
+
+  // ---------------------------------------------------------------------------
+  // Realtime transport
+  // ---------------------------------------------------------------------------
+  // Must be registered before the realtime routes: the plugin decorates the
+  // route shorthand with the `websocket: true` option they rely on.
+  await app.register(websocket, {
+    options: {
+      // Client frames are tiny control messages; 4 KB is already generous and
+      // keeps a hostile client from buffering anything meaningful.
+      maxPayload: 4096,
+    },
+  });
 
   // ---------------------------------------------------------------------------
   // Ticket artefacts
@@ -110,7 +141,7 @@ export async function buildServer(): Promise<FastifyInstance> {
     const ready = Object.values(checks).every(Boolean);
     if (!ready) reply.status(503);
 
-    return { ready, checks };
+    return { ready, checks, realtime: realtimeStats() };
   });
 
   // ---------------------------------------------------------------------------
@@ -125,6 +156,10 @@ export async function buildServer(): Promise<FastifyInstance> {
   await app.register(loyaltyRoutes, { prefix: '/api/v1' });
   await app.register(itineraryRoutes, { prefix: '/api/v1' });
   await app.register(adminRoutes, { prefix: '/api/v1' });
+  await app.register(promoRoutes, { prefix: '/api/v1' });
+  await app.register(supportRoutes, { prefix: '/api/v1' });
+  await app.register(notificationRoutes, { prefix: '/api/v1' });
+  await app.register(realtimeRoutes, { prefix: '/api/v1' });
 
   app.get('/', async () => ({
     service: 'Voyahub API',
@@ -193,6 +228,7 @@ async function main(): Promise<void> {
     logger.info('server.shutdown_requested', { signal });
     clearInterval(sweeper);
     await app.close();
+    await closeRealtimeBus();
     await prisma.$disconnect();
     process.exit(0);
   };

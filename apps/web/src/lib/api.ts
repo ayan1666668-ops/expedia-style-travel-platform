@@ -1,12 +1,26 @@
 /**
  * Typed client for the Voyahub API.
  *
- * Calls are made server-side (React Server Components) and from the browser
- * after login. The base URL comes from the environment so the same build works
- * locally and in production.
+ * Calls are made both server-side (React Server Components) and from the browser
+ * after login, and the two want *different* URLs:
+ *
+ *   - Server components render inside the same network as the API, so they use
+ *     the internal address. Routing them through a public tunnel would add a
+ *     full round-trip to every page render.
+ *   - The browser uses the storefront's own origin by default, and Next.js
+ *     rewrites `/api/v1/*` to the API (see `next.config.ts`). That keeps the
+ *     browser on a single origin, so there is no CORS preflight and no
+ *     allowlist to keep in sync.
+ *
+ * Set `NEXT_PUBLIC_API_BASE_URL` only when the API genuinely lives on a separate
+ * origin — it overrides the same-origin default and re-introduces CORS.
  */
 
-const API_BASE = process.env.API_INTERNAL_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:4000';
+const API_BASE =
+  typeof window === 'undefined'
+    ? (process.env.API_INTERNAL_URL ?? 'http://localhost:4000')
+    : (process.env.NEXT_PUBLIC_API_BASE_URL ?? '');
+
 const API_PREFIX = '/api/v1';
 
 export class ApiError extends Error {
@@ -99,6 +113,26 @@ export type Facets = {
   tags: { value: string; label: string; count: number }[];
 };
 
+/**
+ * One category bucket of a unified search response. The API computes these in
+ * the same pass as `items` / `facets`, so the category rails, the tab counts and
+ * the flat list always describe the same snapshot of the catalogue.
+ */
+export type SearchGroup = {
+  type: string;
+  label: string;
+  count: number;
+  items: SearchHit[];
+};
+
+/** Category roll-up used to populate the unified search panel before any query. */
+export type SearchCategory = {
+  type: string;
+  label: string;
+  productCount: number;
+  fromPriceCents: number;
+};
+
 export type SearchResponse = {
   items: SearchHit[];
   total: number;
@@ -106,6 +140,7 @@ export type SearchResponse = {
   pageSize: number;
   totalPages: number;
   facets: Facets;
+  groups: SearchGroup[];
   tookMs: number;
   engine: string;
 };
@@ -303,6 +338,33 @@ export type CancellationQuote = {
   reason: string;
 };
 
+/**
+ * In-app notification row.
+ *
+ * `payload` carries the event context (`orderNumber`, `status`, `refundCents`,
+ * …) so the notification centre can render a meaningful line and deep-link into
+ * the order without a second request.
+ */
+export type AppNotification = {
+  id: string;
+  channel: string;
+  status: string;
+  template: string;
+  subject: string | null;
+  locale: string;
+  payload: Record<string, unknown> | null;
+  orderId: string | null;
+  orderNumber: string | null;
+  createdAt: string;
+  readAt: string | null;
+};
+
+export type NotificationsResponse = {
+  items: AppNotification[];
+  unread: number;
+  nextCursor: string | null;
+};
+
 export type DashboardData = {
   kpis: {
     orders30d: number;
@@ -352,6 +414,161 @@ export type ScanResult = {
 };
 
 // ---------------------------------------------------------------------------
+// Promotional banners
+// ---------------------------------------------------------------------------
+
+/** Already localised by the API — `title` is whichever language was resolved. */
+export type PromoBanner = {
+  id: string;
+  slot: string;
+  title: string;
+  body: string | null;
+  ctaLabel: string | null;
+  ctaHref: string | null;
+  imageUrl: string | null;
+  theme: 'brand' | 'accent' | 'success' | 'warning' | 'neutral';
+  sortOrder: number;
+};
+
+export type PromoBannerAdmin = {
+  id: string;
+  slot: string;
+  titleEn: string;
+  titleZh: string | null;
+  bodyEn: string | null;
+  bodyZh: string | null;
+  ctaLabelEn: string | null;
+  ctaLabelZh: string | null;
+  ctaHref: string | null;
+  imageUrl: string | null;
+  theme: string;
+  startsAt: string | null;
+  endsAt: string | null;
+  isActive: boolean;
+  sortOrder: number;
+  markets: string[];
+  locales: string[];
+  clickCount: number;
+  createdAt: string;
+};
+
+export type PromoBannerInput = {
+  slot: string;
+  titleEn: string;
+  titleZh?: string | null;
+  bodyEn?: string | null;
+  bodyZh?: string | null;
+  ctaLabelEn?: string | null;
+  ctaLabelZh?: string | null;
+  ctaHref?: string | null;
+  imageUrl?: string | null;
+  theme?: string;
+  startsAt?: string | null;
+  endsAt?: string | null;
+  isActive?: boolean;
+  sortOrder?: number;
+  markets?: string[];
+  locales?: string[];
+};
+
+// ---------------------------------------------------------------------------
+// Support console
+// ---------------------------------------------------------------------------
+
+export type SupportCustomer = {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  phone: string | null;
+  locale: string;
+  countryCode: string | null;
+  role: string;
+  avatarUrl: string | null;
+  marketingOptIn: boolean;
+  emailVerified: boolean;
+  createdAt: string;
+  walletCents: number;
+  walletEnabled: boolean;
+  loyaltyPoints: number;
+  loyaltyTier: string;
+  lifetimePoints: number;
+  orderCount: number;
+  reviewCount: number;
+};
+
+export type SupportCustomerDetail = SupportCustomer & {
+  orders: {
+    id: string;
+    orderNumber: string;
+    status: string;
+    totalCents: number;
+    currency: string;
+    placedAt: string;
+  }[];
+  walletTransactions: {
+    id: string;
+    kind: string;
+    amountCents: number;
+    currency: string;
+    balanceAfterCents: number;
+    orderId: string | null;
+    note: string | null;
+    actorEmail: string | null;
+    createdAt: string;
+  }[];
+};
+
+export type SupportOrderSummary = {
+  id: string;
+  orderNumber: string;
+  status: string;
+  totalCents: number;
+  refundedCents: number;
+  currency: string;
+  placedAt: string;
+  customer: {
+    id: string;
+    email: string;
+    firstName: string;
+    lastName: string;
+    walletCents: number;
+  };
+  ticketCount: number;
+};
+
+export type CouponVerification = {
+  valid: boolean;
+  reason: string;
+  code?: string;
+  description?: string | null;
+  discountType?: string;
+  discountValue?: number;
+  maxDiscountCents?: number | null;
+  minOrderCents?: number;
+  currency?: string | null;
+  usageLimit?: number | null;
+  usageCount?: number;
+  perUserLimit?: number;
+  stackable?: boolean;
+  startsAt?: string | null;
+  endsAt?: string | null;
+};
+
+export type AuditEntry = {
+  id: string;
+  actorId: string | null;
+  actorRole: string | null;
+  action: string;
+  entityType: string;
+  entityId: string | null;
+  before: unknown;
+  after: unknown;
+  ip: string | null;
+  createdAt: string;
+};
+
+// ---------------------------------------------------------------------------
 // Endpoints
 // ---------------------------------------------------------------------------
 
@@ -372,6 +589,12 @@ export const api = {
 
   search: (params: SearchParams = {}, token?: string | null) =>
     request<SearchResponse>(`/search${toQuery(params)}`, { token, revalidate: 30 }),
+
+  /** Category roll-up for the unified search panel (counts per product type). */
+  searchCategories: (params: SearchParams = {}) =>
+    request<{ categories: SearchCategory[]; total: number }>(`/search/categories${toQuery(params)}`, {
+      revalidate: 300,
+    }),
 
   destinations: () => request<Destination[]>('/destinations', { revalidate: 3600 }),
 
@@ -475,6 +698,19 @@ export const api = {
 
   cancelOrder: (orderId: string, body: { reason?: string }, token: string) =>
     request<{ refundCents: number; status: string }>(`/orders/${orderId}/cancel`, { method: 'POST', body, token }),
+
+  // --- Notification centre ---
+  notifications: (params: SearchParams = {}, token?: string | null) =>
+    request<NotificationsResponse>(`/notifications${toQuery(params)}`, { token, cache: 'no-store' }),
+
+  markNotificationRead: (id: string, token: string) =>
+    request<{ ok: boolean; unread: number }>(`/notifications/${encodeURIComponent(id)}/read`, {
+      method: 'POST',
+      token,
+    }),
+
+  markAllNotificationsRead: (token: string) =>
+    request<{ ok: boolean; unread: number }>('/notifications/read-all', { method: 'POST', token }),
 
   // --- Tickets ---
   tickets: (token: string) =>
@@ -608,6 +844,88 @@ export const api = {
       noShowRate: number;
       recent: { scannedAt: string; gateName: string | null; result: string; ticketNumber: string | null; holderName: string | null }[];
     }>(`/scan/stats${toQuery({ gate })}`, { token, cache: 'no-store' }),
+
+  // --- Promotional banners ---
+  promoBanners: (params: SearchParams = {}) =>
+    request<{
+      locale: string;
+      market: string;
+      banners: PromoBanner[];
+      grouped: Record<string, PromoBanner[]>;
+    }>(`/promo/banners${toQuery(params)}`, { revalidate: 60 }),
+
+  adminPromoBanners: (token: string) =>
+    request<{ items: PromoBannerAdmin[] }>('/admin/promo/banners', { token, cache: 'no-store' }),
+
+  createPromoBanner: (body: PromoBannerInput, token: string) =>
+    request<PromoBannerAdmin>('/admin/promo/banners', { method: 'POST', body, token }),
+
+  updatePromoBanner: (id: string, body: Partial<PromoBannerInput>, token: string) =>
+    request<PromoBannerAdmin>(`/admin/promo/banners/${id}`, { method: 'PATCH', body, token }),
+
+  deletePromoBanner: (id: string, token: string) =>
+    request<{ ok: boolean }>(`/admin/promo/banners/${id}`, { method: 'DELETE', token }),
+
+  trackPromoClick: (id: string) =>
+    request<{ ok: boolean }>(`/promo/banners/${id}/click`, { method: 'POST' }),
+
+  // --- Support console ---
+  supportCustomers: (params: SearchParams, token: string) =>
+    request<{ items: SupportCustomer[]; nextCursor: string | null }>(`/support/customers${toQuery(params)}`, {
+      token,
+      cache: 'no-store',
+    }),
+
+  supportCustomer: (id: string, token: string) =>
+    request<SupportCustomerDetail>(`/support/customers/${id}`, { token, cache: 'no-store' }),
+
+  updateSupportCustomer: (
+    id: string,
+    body: {
+      firstName?: string;
+      lastName?: string;
+      phone?: string | null;
+      locale?: string;
+      countryCode?: string | null;
+      marketingOptIn?: boolean;
+      walletEnabled?: boolean;
+      loyaltyPoints?: number;
+      loyaltyTier?: string;
+    },
+    token: string,
+  ) => request<{ ok: boolean }>(`/support/customers/${id}`, { method: 'PATCH', body, token }),
+
+  adjustWallet: (
+    id: string,
+    body: { amountCents: number; currency?: string; note: string },
+    token: string,
+  ) =>
+    request<{ ok: boolean; balanceCents: number; transactionId: string }>(
+      `/support/customers/${id}/wallet`,
+      { method: 'POST', body, token },
+    ),
+
+  supportOrders: (params: SearchParams, token: string) =>
+    request<{ items: SupportOrderSummary[] }>(`/support/orders/lookup${toQuery(params)}`, {
+      token,
+      cache: 'no-store',
+    }),
+
+  supportRefund: (orderId: string, body: { amountCents: number; reason: string }, token: string) =>
+    request<{ ok: boolean; refundedCents: number; walletCents: number }>(`/support/orders/${orderId}/refund`, {
+      method: 'POST',
+      body,
+      token,
+    }),
+
+  verifyCoupon: (code: string, token: string) =>
+    request<CouponVerification>(`/support/coupons/${encodeURIComponent(code)}/verify`, {
+      token,
+      cache: 'no-store',
+    }),
+
+  supportAudit: (params: SearchParams, token: string) =>
+    request<{ items: AuditEntry[] }>(`/support/audit${toQuery(params)}`, { token, cache: 'no-store' }),
 };
 
 export { API_BASE };
@@ -629,5 +947,9 @@ export function mediaUrl(url: string | null | undefined): string | null {
 
   const ticketNumber = path.slice(index + marker.length).split('/')[0];
   const file = path.slice(path.lastIndexOf('/') + 1);
-  return `${API_BASE}/media/tickets/${ticketNumber}/${file}`;
+  // Always relative. `/media` is proxied by Next on the storefront's own origin
+  // (see `next.config.ts`), so building an absolute URL here would bake in
+  // whichever host happened to render — and SSR would emit `localhost:4000`,
+  // which is unreachable from a visitor's browser.
+  return `/media/tickets/${ticketNumber}/${file}`;
 }

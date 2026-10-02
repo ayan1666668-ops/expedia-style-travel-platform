@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from 'react';
 import { api, ApiError, type ScanResult } from '@/lib/api';
 import { readToken } from '@/lib/session';
 import { formatDate } from '@/lib/format';
+import type { LocaleCode } from '@/lib/i18n/config';
+import { createTranslator } from '@/lib/i18n/dictionaries';
 
 type Stats = Awaited<ReturnType<typeof api.scanStats>>;
 
@@ -13,7 +15,8 @@ type Stats = Awaited<ReturnType<typeof api.scanStats>>;
  *  - "Admit" commits the redemption, so it needs an explicit toggle.
  * That mirrors how real gate hardware is deployed (dry-run during training).
  */
-export function GateScanner() {
+export function GateScanner({ locale }: { locale: LocaleCode }) {
+  const t = createTranslator(locale);
   const [code, setCode] = useState('');
   const [gate, setGate] = useState('Main Gate');
   const [commit, setCommit] = useState(true);
@@ -64,7 +67,7 @@ export function GateScanner() {
       setResult({
         valid: false,
         result: 'ERROR',
-        message: caught instanceof ApiError ? caught.message : 'Scanner error — check the connection.',
+        message: caught instanceof ApiError ? caught.message : t('staff.scannerError'),
       });
     } finally {
       setBusy(false);
@@ -72,11 +75,11 @@ export function GateScanner() {
   }
 
   return (
-    <div className="grid" style={{ gridTemplateColumns: 'minmax(0, 1.4fr) minmax(260px, 1fr)', gap: 'var(--sp-5)', alignItems: 'start' }}>
+    <div className="grid scanner-layout" style={{ gap: 'var(--sp-5)', alignItems: 'start' }}>
       <div className="stack-lg">
         <form className="card card-pad stack" onSubmit={scan}>
           <label className="field">
-            <span className="label">Ticket number or barcode</span>
+            <span className="label">{t('staff.ticketNumberOrBarcode')}</span>
             <input
               ref={inputRef}
               className="input input-lg mono"
@@ -90,23 +93,21 @@ export function GateScanner() {
 
           <div className="row wrap" style={{ gap: 'var(--sp-4)' }}>
             <label className="field grow">
-              <span className="label">Gate</span>
+              <span className="label">{t('staff.gateLabel')}</span>
               <input className="input" value={gate} onChange={(event) => setGate(event.target.value)} />
             </label>
             <label className="row" style={{ gap: 'var(--sp-2)', paddingTop: 20 }}>
               <input type="checkbox" checked={commit} onChange={(event) => setCommit(event.target.checked)} />
-              <span className="small bold">Admit &amp; redeem</span>
+              <span className="small bold">{t('staff.admitAndRedeem')}</span>
             </label>
           </div>
 
           <p className="tiny subtle" style={{ margin: 0 }}>
-            {commit
-              ? 'Admitting writes a permanent redemption — a re-scan of the same ticket will be rejected.'
-              : 'Dry run: the ticket is checked but not marked as used.'}
+            {commit ? t('staff.admitHint') : t('staff.dryRunHint')}
           </p>
 
           <button className="btn btn-primary btn-block btn-lg" disabled={busy || code.trim() === ''}>
-            {busy ? 'Checking…' : commit ? 'Scan & admit' : 'Check only'}
+            {busy ? t('staff.checking') : commit ? t('staff.scanAndAdmit') : t('staff.checkOnly')}
           </button>
         </form>
 
@@ -123,7 +124,9 @@ export function GateScanner() {
                 {result.valid ? '✅' : '⛔'}
               </span>
               <div>
-                <h3 style={{ margin: 0 }}>{result.valid ? 'Admit' : 'Do not admit'}</h3>
+                <h3 style={{ margin: 0 }}>
+                  {result.valid ? t('staff.admit') : t('staff.doNotAdmit')}
+                </h3>
                 <p className="small" style={{ margin: '2px 0 0' }}>
                   {result.message}
                 </p>
@@ -132,13 +135,15 @@ export function GateScanner() {
 
             {result.ticket && (
               <div className="panel" style={{ background: 'rgba(255,255,255,0.7)' }}>
-                <Line label="Ticket" value={result.ticket.ticketNumber} mono />
-                <Line label="Guest" value={result.ticket.holderName} />
-                <Line label="Experience" value={result.ticket.productName} />
-                <Line label="Date" value={formatDate(result.ticket.serviceDate)} />
-                {result.ticket.timeSlot && <Line label="Slot" value={result.ticket.timeSlot} />}
-                <Line label="Party size" value={String(result.ticket.partySize)} />
-                <Line label="Seats already used" value={String(result.ticket.redeemedSeats)} />
+                <Line label={t('staff.ticketLabel')} value={result.ticket.ticketNumber} mono />
+                <Line label={t('staff.guestLabel')} value={result.ticket.holderName} />
+                <Line label={t('staff.experienceLabel')} value={result.ticket.productName} />
+                <Line label={t('staff.date')} value={formatDate(result.ticket.serviceDate, locale)} />
+                {result.ticket.timeSlot && (
+                  <Line label={t('staff.slotLabel')} value={result.ticket.timeSlot} />
+                )}
+                <Line label={t('staff.partySize')} value={String(result.ticket.partySize)} />
+                <Line label={t('staff.seatsUsed')} value={String(result.ticket.redeemedSeats)} />
               </div>
             )}
           </div>
@@ -148,20 +153,20 @@ export function GateScanner() {
       <aside className="stack">
         {stats && (
           <div className="card card-pad stack-sm">
-            <h3 style={{ fontSize: 16, margin: 0 }}>Today at {gate}</h3>
+            <h3 style={{ fontSize: 16, margin: 0 }}>{t('staff.todayAt', gate)}</h3>
             <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', gap: 'var(--sp-3)' }}>
-              <Stat label="Tickets" value={String(stats.ticketsToday)} />
-              <Stat label="Admitted" value={String(stats.admitted)} />
-              <Stat label="No-show" value={`${stats.noShowRate}%`} />
-              <Stat label="This session" value={String(history.length)} />
+              <Stat label={t('staff.ticketsLabel')} value={String(stats.ticketsToday)} />
+              <Stat label={t('staff.admittedLabel')} value={String(stats.admitted)} />
+              <Stat label={t('staff.noShowLabel')} value={`${stats.noShowRate}%`} />
+              <Stat label={t('staff.thisSession')} value={String(history.length)} />
             </div>
           </div>
         )}
 
         <div className="card card-pad stack-sm">
-          <h3 style={{ fontSize: 16, margin: 0 }}>Recent scans</h3>
+          <h3 style={{ fontSize: 16, margin: 0 }}>{t('staff.recentScans')}</h3>
           {history.length === 0 ? (
-            <p className="muted small">No scans yet this session.</p>
+            <p className="muted small">{t('staff.noScansYet')}</p>
           ) : (
             history.map((entry, index) => (
               <div key={index} className="row-between small" style={{ paddingBottom: 6, borderBottom: '1px solid var(--border)' }}>

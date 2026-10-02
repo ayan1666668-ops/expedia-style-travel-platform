@@ -100,6 +100,48 @@ export function getRedis(): Redis | MemoryRedis {
   return client;
 }
 
+/**
+ * True when a real Redis server backs the client.
+ *
+ * The in-memory fallback is a single-process stub: it cannot do Pub/Sub, so the
+ * realtime bus uses this to decide whether it can fan events out across API
+ * instances or has to stay process-local.
+ */
+export function hasRealRedis(): boolean {
+  return getRedis() instanceof Redis;
+}
+
+/**
+ * Opens a dedicated Pub/Sub connection.
+ *
+ * ioredis cannot run `subscribe()` and normal commands on the same connection,
+ * so this duplicates the primary client. Returns `null` on the in-memory
+ * fallback, and callers are expected to degrade gracefully.
+ *
+ * Errors are swallowed: a broken subscriber must never take down the API, it
+ * only degrades realtime delivery to the local process.
+ */
+export function createSubscriberClient(): Redis | null {
+  if (!hasRealRedis()) return null;
+
+  try {
+    const subscriber = (getRedis() as Redis).duplicate({
+      lazyConnect: false,
+      maxRetriesPerRequest: null,
+      enableOfflineQueue: true,
+    });
+    subscriber.on('error', (error: Error) => {
+      if (process.env.NODE_ENV !== 'test') {
+        console.warn('[redis] subscriber error:', error.message);
+      }
+    });
+    return subscriber;
+  } catch (error) {
+    console.warn('[redis] subscriber unavailable:', (error as Error).message);
+    return null;
+  }
+}
+
 export async function closeRedis(): Promise<void> {
   if (!client) return;
   await client.quit().catch(() => undefined);

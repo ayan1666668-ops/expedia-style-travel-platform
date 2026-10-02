@@ -12,6 +12,12 @@ const listSchema = z.object({
   destination: z.string().trim().max(200).optional(),
   destinations: z.string().trim().max(600).optional(),
   type: z.enum(Object.keys(TYPE_LABELS) as [string, ...string[]]).optional(),
+  /**
+   * Unified multi-category query: a comma-separated list of product types, e.g.
+   * `/search?types=HOTEL_ROOM,TOUR`. Coexists with the single `type` alias so
+   * existing links keep working; `types` wins when both are sent.
+   */
+  types: z.string().trim().max(600).optional(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   dates: z.string().trim().max(200).optional(),
   minPrice: z.coerce.number().int().min(0).optional(),
@@ -25,10 +31,26 @@ const listSchema = z.object({
   lng: z.coerce.number().min(-180).max(180).optional(),
   radiusKm: z.coerce.number().min(1).max(500).optional(),
   sort: z.enum(['RELEVANCE', 'PRICE_ASC', 'PRICE_DESC', 'RATING', 'POPULARITY', 'DISTANCE']).optional(),
+  /** `TYPE` returns one bucket per category (default); `NONE` disables grouping. */
+  groupBy: z.enum(['TYPE', 'NONE']).optional(),
+  groupLimit: z.coerce.number().int().min(1).max(24).optional(),
   page: z.coerce.number().int().min(1).optional(),
   pageSize: z.coerce.number().int().min(1).max(60).optional(),
   locale: z.string().optional(),
 });
+
+const PRODUCT_TYPE_VALUES = Object.keys(TYPE_LABELS) as [string, ...string[]];
+
+/** Splits a CSV query parameter, dropping blanks and unknown enum values. */
+function csv(value: string | undefined, allowed?: readonly string[]): string[] | undefined {
+  const parts = value
+    ?.split(',')
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (!parts?.length) return undefined;
+  const values = allowed ? parts.filter((part) => allowed.includes(part)) : parts;
+  return values.length ? values : undefined;
+}
 
 /**
  * Search + discovery endpoints.
@@ -40,25 +62,32 @@ export async function searchRoutes(app: FastifyInstance): Promise<void> {
     const params = listSchema.parse(request.query);
     const locale = resolveLocale(request);
 
+    // `types` (multi) supersedes the legacy single `type` filter so both the
+    // category tabs and the multi-select facet feed the same unified query.
+    const types = csv(params.types, PRODUCT_TYPE_VALUES) as ProductType[] | undefined;
+
     const started = Date.now();
     const result = await searchProducts({
       query: params.q,
       destinationSlug: params.destination,
-      destinationSlugIn: params.destinations?.split(',').map((s) => s.trim()).filter(Boolean),
-      type: params.type as ProductType | undefined,
+      destinationSlugIn: csv(params.destinations),
+      type: types ? undefined : (params.type as ProductType | undefined),
+      typeIn: types,
       serviceDate: params.date,
-      serviceDates: params.dates?.split(',').map((s) => s.trim()).filter(Boolean),
+      serviceDates: csv(params.dates),
       minPriceCents: params.minPrice,
       maxPriceCents: params.maxPrice,
       minRating: params.minRating,
       instantConfirmOnly: params.instantConfirm,
       freeCancellationOnly: params.freeCancellation,
       skipTheLineOnly: params.skipTheLine,
-      tags: params.tags?.split(',').map((s) => s.trim()).filter(Boolean),
+      tags: csv(params.tags),
       latitude: params.lat,
       longitude: params.lng,
       radiusKm: params.radiusKm,
       sort: params.sort,
+      groupBy: params.groupBy ?? 'TYPE',
+      groupLimit: params.groupLimit,
       page: params.page,
       pageSize: params.pageSize,
       locale,
@@ -70,7 +99,7 @@ export async function searchRoutes(app: FastifyInstance): Promise<void> {
         data: {
           userId: request.user.id,
           query: params.q,
-          productType: params.type as ProductType | undefined,
+          productType: (types?.[0] ?? params.type) as ProductType | undefined,
           filters: JSON.parse(JSON.stringify(params)),
           sort: params.sort,
           resultCount: result.total,
@@ -80,6 +109,38 @@ export async function searchRoutes(app: FastifyInstance): Promise<void> {
     }
 
     return result;
+  });
+
+  /**
+   * Category roll-up for the unified search panel.
+   *
+   * One aggregate instead of one request per category: the storefront uses it to
+   * render the category tab bar (and its counts) *before* the shopper types
+   * anything, so the multi-category nature of the catalogue is visible up front.
+   */
+  app.get('/search/categories', async (request) => {
+    const query = z.object({ destination: z.string().trim().max(200).optional() }).parse(request.query);
+
+    const rows = await prisma.searchDocument.groupBy({
+      by: ['type'],
+      where: {
+        status: 'PUBLISHED',
+        ...(query.destination ? { destinationPath: { has: query.destination } } : {}),
+      },
+      _count: { _all: true },
+      _min: { basePriceCents: true },
+    });
+
+    const categories = rows
+      .map((row) => ({
+        type: row.type,
+        label: TYPE_LABELS[row.type] ?? row.type,
+        productCount: row._count._all,
+        fromPriceCents: row._min.basePriceCents ?? 0,
+      }))
+      .sort((a, b) => b.productCount - a.productCount);
+
+    return { categories, total: categories.reduce((sum, category) => sum + category.productCount, 0) };
   });
 
   /** Popular destinations for the landing page and the nav mega-menu. */

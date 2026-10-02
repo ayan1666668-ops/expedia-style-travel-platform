@@ -2,18 +2,21 @@ import Link from 'next/link';
 import { api } from '@/lib/api';
 import { formatMoney } from '@/lib/format';
 import { ProductCard } from '@/components/ProductCard';
+import { PromoStrip } from '@/components/PromoStrip';
+import { resolveServerLocale } from '@/lib/i18n/config';
+import { createTranslator } from '@/lib/i18n/dictionaries';
+import type { LocaleCode } from '@/lib/i18n/config';
 
 // Destination rails and curated collections change slowly; revalidate hourly.
-export const revalidate = 3600;
+// Shorter than the promotions strip, which operators edit far more often.
+export const revalidate = 300;
 
-const TRUST_POINTS = [
-  'Instant e-tickets on most bookings',
-  'Free cancellation up to 24 hours',
-  'Skip-the-line options in 20+ cities',
-  'Secure checkout · no booking fees',
-];
+const TRUST_POINTS = ['home.instantConfirm', 'home.freeCancel', 'home.skipTheLine'] as const;
 
 export default async function HomePage() {
+  const locale = await resolveServerLocale();
+  const t = createTranslator(locale);
+
   // Every rail is independent: one failing call must not blank the page.
   const [destinations, trending, freeCancel, skipLine, topRated] = await Promise.all([
     api.destinations().catch(() => []),
@@ -37,22 +40,17 @@ export default async function HomePage() {
       >
         <div className="container">
           <div className="stack" style={{ maxWidth: 720 }}>
-            <h1 style={{ fontSize: 38, letterSpacing: '-0.03em' }}>
-              Book the thing you actually want to do
-            </h1>
-            <p style={{ fontSize: 17, opacity: 0.9, maxWidth: 560 }}>
-              Skip-the-line tickets, guided tours, river cruises and day trips across Europe and North
-              America. One checkout, instant e-tickets, free cancellation on most bookings.
-            </p>
+            <h1 style={{ fontSize: 38, letterSpacing: '-0.03em' }}>{t('home.heroTitle')}</h1>
+            <p style={{ fontSize: 17, opacity: 0.9, maxWidth: 560 }}>{t('home.heroSubtitle')}</p>
           </div>
 
-          <SearchBox />
+          <SearchBox locale={locale} />
 
           <div className="row wrap" style={{ gap: 'var(--sp-4)', marginTop: 'var(--sp-5)' }}>
-            {TRUST_POINTS.map((point) => (
-              <span key={point} className="small" style={{ opacity: 0.9, display: 'inline-flex', gap: 6 }}>
+            {TRUST_POINTS.map((key) => (
+              <span key={key} className="small" style={{ opacity: 0.9, display: 'inline-flex', gap: 6 }}>
                 <span aria-hidden>✓</span>
-                {point}
+                {t(key)}
               </span>
             ))}
           </div>
@@ -61,19 +59,24 @@ export default async function HomePage() {
 
       <div className="container">
         {/* -------------------------------------------------------------- */}
+        {/* Operator-authored promotions                                   */}
+        {/* -------------------------------------------------------------- */}
+        <PromoStrip locale={locale} />
+
+        {/* -------------------------------------------------------------- */}
         {/* Destination grid                                              */}
         {/* -------------------------------------------------------------- */}
         {destinations.length > 0 && (
-          <section style={{ padding: 'var(--sp-7) 0' }}>
+          <section style={{ padding: 'var(--sp-4) 0 var(--sp-7)' }}>
             <div className="row-between" style={{ marginBottom: 'var(--sp-4)' }}>
               <div>
-                <h2>Where to next?</h2>
+                <h2>{t('home.destinations')}</h2>
                 <p className="small muted" style={{ margin: 0 }}>
-                  Popular destinations with instant confirmation
+                  {t('home.heroSubtitle')}
                 </p>
               </div>
               <Link href="/search" className="btn btn-ghost btn-sm">
-                See all →
+                {t('common.seeAll')} →
               </Link>
             </div>
 
@@ -108,7 +111,7 @@ export default async function HomePage() {
                         {destination.name}
                       </div>
                       <div className="tiny" style={{ opacity: 0.85 }}>
-                        {destination.productCount} experiences
+                        {t('home.experiencesCount', destination.productCount)}
                       </div>
                     </div>
                   </div>
@@ -121,7 +124,14 @@ export default async function HomePage() {
         {/* -------------------------------------------------------------- */}
         {/* Trending                                                      */}
         {/* -------------------------------------------------------------- */}
-        {trending && trending.items.length > 0 && <Rail title={trending.title} subtitle="What other travellers are booking right now" hits={trending.items} />}
+        {trending && trending.items.length > 0 && (
+          <Rail
+            title={trending.title}
+            subtitle={t('home.trendingSubtitle')}
+            hits={trending.items}
+            locale={locale}
+          />
+        )}
 
         {/* -------------------------------------------------------------- */}
         {/* Promo split: free cancellation + skip the line                */}
@@ -130,20 +140,22 @@ export default async function HomePage() {
           <div className="grid grid-2">
             {freeCancel && (
               <CollectionCard
-                title="Free cancellation"
-                subtitle="Cancel up to 24 hours before, get every cent back"
+                title={t('home.freeCancel')}
+                subtitle={t('home.freeCancelSubtitle')}
                 href="/collections/free-cancellation"
                 hits={freeCancel.items.slice(0, 3)}
                 tone="success"
+                locale={locale}
               />
             )}
             {skipLine && (
               <CollectionCard
-                title="Skip the line"
-                subtitle="Priority entry so you walk straight past the queue"
+                title={t('home.skipTheLine')}
+                subtitle={t('home.skipLineSubtitle')}
                 href="/collections/skip-the-line"
                 hits={skipLine.items.slice(0, 3)}
                 tone="brand"
+                locale={locale}
               />
             )}
           </div>
@@ -154,9 +166,10 @@ export default async function HomePage() {
         {/* -------------------------------------------------------------- */}
         {topRated && topRated.items.length > 0 && (
           <Rail
-            title="Traveller favourites"
-            subtitle="Rated 4.5 and above by people who actually went"
+            title={t('home.favourites')}
+            subtitle={t('home.favouritesSubtitle')}
             hits={topRated.items}
+            locale={locale}
           />
         )}
 
@@ -174,15 +187,12 @@ export default async function HomePage() {
           >
             <div className="row-between wrap" style={{ gap: 'var(--sp-5)' }}>
               <div className="stack-sm" style={{ maxWidth: 480 }}>
-                <span className="badge badge-brand">Voyahub Rewards</span>
-                <h2>Earn a point for every dollar</h2>
-                <p className="muted">
-                  100 points = $1 off. Reach Silver, Gold and Platinum for early access to flash sales,
-                  free ticket changes and priority support.
-                </p>
+                <span className="badge badge-brand">{t('home.rewardsBadge')}</span>
+                <h2>{t('home.rewardsTitle')}</h2>
+                <p className="muted">{t('home.rewardsBody')}</p>
               </div>
               <Link href="/loyalty" className="btn btn-primary btn-lg">
-                Join the programme
+                {t('home.joinProgramme')}
               </Link>
             </div>
           </div>
@@ -194,24 +204,18 @@ export default async function HomePage() {
 
 // ---------------------------------------------------------------------------
 
-function SearchBox() {
+function SearchBox({ locale }: { locale: LocaleCode }) {
+  const t = createTranslator(locale);
+
   return (
     <form
       action="/search"
       method="get"
-      className="card"
-      style={{
-        marginTop: 'var(--sp-6)',
-        padding: 'var(--sp-3)',
-        display: 'grid',
-        gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 1.2fr) minmax(0, 1fr) auto',
-        gap: 'var(--sp-2)',
-        alignItems: 'center',
-      }}
+      className="card hero-search"
     >
-      <div>
+      <div className="hero-field">
         <label htmlFor="q" className="tiny subtle bold" style={{ display: 'block', marginBottom: 2 }}>
-          What do you want to do?
+          {t('home.whatToDo')}
         </label>
         <input
           id="q"
@@ -222,22 +226,22 @@ function SearchBox() {
         />
       </div>
 
-      <div>
+      <div className="hero-field">
         <label htmlFor="destination" className="tiny subtle bold" style={{ display: 'block', marginBottom: 2 }}>
-          Where
+          {t('home.where')}
         </label>
         <input
           id="destination"
           name="destination"
           className="input"
-          placeholder="City or destination"
+          placeholder={locale === 'zh' ? '城市或目的地' : 'City or destination'}
           style={{ border: 'none', padding: '4px 0', fontSize: 16 }}
         />
       </div>
 
-      <div>
+      <div className="hero-field">
         <label htmlFor="date" className="tiny subtle bold" style={{ display: 'block', marginBottom: 2 }}>
-          When
+          {t('home.when')}
         </label>
         <input
           id="date"
@@ -248,14 +252,24 @@ function SearchBox() {
         />
       </div>
 
-      <button type="submit" className="btn btn-accent btn-lg" style={{ height: 48 }}>
-        Search
+      <button type="submit" className="btn btn-accent btn-lg hero-submit" style={{ height: 48 }}>
+        {t('common.search')}
       </button>
     </form>
   );
 }
 
-function Rail({ title, subtitle, hits }: { title: string; subtitle?: string; hits: Parameters<typeof ProductCard>[0]['hit'][] }) {
+function Rail({
+  title,
+  subtitle,
+  hits,
+  locale,
+}: {
+  title: string;
+  subtitle?: string;
+  hits: Parameters<typeof ProductCard>[0]['hit'][];
+  locale: LocaleCode;
+}) {
   return (
     <section style={{ paddingBottom: 'var(--sp-7)' }}>
       <div className="row-between" style={{ marginBottom: 'var(--sp-4)' }}>
@@ -270,7 +284,7 @@ function Rail({ title, subtitle, hits }: { title: string; subtitle?: string; hit
       </div>
       <div className="stack">
         {hits.slice(0, 5).map((hit) => (
-          <ProductCard key={hit.productId} hit={hit} />
+          <ProductCard key={hit.productId} hit={hit} locale={locale} />
         ))}
       </div>
     </section>
@@ -283,12 +297,14 @@ function CollectionCard({
   href,
   hits,
   tone,
+  locale,
 }: {
   title: string;
   subtitle: string;
   href: string;
   hits: Parameters<typeof ProductCard>[0]['hit'][];
   tone: 'brand' | 'success';
+  locale: LocaleCode;
 }) {
   return (
     <div

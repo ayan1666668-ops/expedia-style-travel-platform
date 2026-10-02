@@ -9,6 +9,7 @@ import { allocate, applyBps, sumCents } from '../../utils/money';
 import { computeQuote, type Quote } from '../pricing/engine';
 import { consumeHold, placeHold, releaseHold, returnSoldUnits } from '../inventory/engine';
 import { getPaymentGateway, isOfflineMethod } from '../payments/gateway';
+import { createInAppNotification, emitOrderCreated, emitOrderEvent, emitPaymentEvent } from '../realtime/notify';
 import { generateTicketArtifacts } from '../ticketing/issuer';
 
 /**
@@ -347,6 +348,18 @@ export async function createPendingOrder(input: CheckoutInput): Promise<Checkout
 
     logger.info('booking.order_created', { orderNumber, totalCents, lines: pricedLines.length });
 
+    // Realtime: the operator console watches checkouts start; the shopper's own
+    // sessions pick this up as "cart submitted".
+    emitOrderCreated({
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      status: order.status,
+      userId: input.userId ?? null,
+      totalCents: order.totalCents,
+      currency: order.currency,
+      itemCount: pricedLines.length,
+    });
+
     return {
       orderId: order.id,
       orderNumber: order.orderNumber,
@@ -541,6 +554,36 @@ export async function confirmPaidOrder(orderId: string, providerChargeId?: strin
   }
 
   logger.info('booking.order_confirmed', { orderNumber: order.orderNumber, tickets: ticketPayloads.length });
+
+  // Realtime: the order page swaps to "Confirmed" and the tickets appear
+  // without a refresh; the console sees the sale land.
+  emitOrderEvent({
+    orderId: order.id,
+    orderNumber: order.orderNumber,
+    status: OrderStatus.CONFIRMED,
+    fromStatus: order.status,
+    userId: order.userId,
+    reason: 'payment captured',
+    totalCents: order.totalCents,
+    currency: order.currency,
+  });
+
+  if (order.userId) {
+    await createInAppNotification({
+      userId: order.userId,
+      orderId: order.id,
+      template: 'order-confirmed',
+      subject: `Order ${order.orderNumber} is confirmed`,
+      locale: order.locale,
+      payload: {
+        orderNumber: order.orderNumber,
+        ticketCount: ticketPayloads.length,
+        totalCents: order.totalCents,
+        currency: order.currency,
+        status: OrderStatus.CONFIRMED,
+      },
+    });
+  }
 }
 
 /**
@@ -749,6 +792,37 @@ export async function cancelOrder(params: {
   });
 
   logger.info('booking.order_cancelled', { orderNumber: order.orderNumber, refundCents });
+
+  // Realtime: refund state is exactly the kind of thing a shopper should not
+  // have to refresh to discover.
+  const finalStatus = refundCents > 0
+    ? fullyRefunded
+      ? OrderStatus.REFUNDED
+      : OrderStatus.PARTIALLY_REFUNDED
+    : OrderStatus.CANCELLED;
+
+  emitOrderEvent({
+    orderId: order.id,
+    orderNumber: order.orderNumber,
+    status: finalStatus,
+    fromStatus: order.status,
+    userId: order.userId,
+    reason: params.reason ?? 'Customer cancellation',
+    totalCents: order.totalCents,
+    currency: order.currency,
+  });
+
+  if (order.userId) {
+    await createInAppNotification({
+      userId: order.userId,
+      orderId: order.id,
+      template: 'order-cancelled',
+      subject: `Order ${order.orderNumber} cancelled`,
+      locale: order.locale,
+      payload: { orderNumber: order.orderNumber, refundCents, currency: order.currency, status: finalStatus },
+    });
+  }
+
   return { refundCents, status: fullyRefunded ? OrderStatus.REFUNDED : OrderStatus.CANCELLED };
 }
 
@@ -810,6 +884,20 @@ export async function initiatePayment(params: {
     },
   });
 
+  // Realtime: the checkout screen reacts the moment the gateway answers, instead
+  // of polling the order endpoint until its status changes.
+  emitPaymentEvent({
+    orderId: order.id,
+    orderNumber: order.orderNumber,
+    paymentId: payment.id,
+    status: payment.status,
+    method: params.method,
+    amountCents: order.totalCents,
+    currency: order.currency,
+    userId: order.userId,
+    failureMessage: result.failureMessage,
+  });
+
   if (result.status === 'CAPTURED') {
     await confirmPaidOrder(order.id, result.providerIntentId);
   }
@@ -835,6 +923,30 @@ export async function expireOrder(orderId: string): Promise<void> {
   });
 
   logger.info('booking.order_expired', { orderNumber: order.orderNumber });
+
+  // A checkout that silently evaporates is the classic dead-end in an OTA: the
+  // shopper is told, in place, that their held seats were released.
+  emitOrderEvent({
+    orderId: order.id,
+    orderNumber: order.orderNumber,
+    status: OrderStatus.EXPIRED,
+    fromStatus: order.status,
+    userId: order.userId,
+    reason: 'checkout window elapsed',
+    totalCents: order.totalCents,
+    currency: order.currency,
+  });
+
+  if (order.userId) {
+    await createInAppNotification({
+      userId: order.userId,
+      orderId: order.id,
+      template: 'order-expired',
+      subject: `Your checkout for ${order.orderNumber} expired`,
+      locale: order.locale,
+      payload: { orderNumber: order.orderNumber, status: OrderStatus.EXPIRED },
+    });
+  }
 }
 
 /** Marks confirmed tickets as redeemed, completing the order. */
@@ -851,6 +963,17 @@ export async function completeOrderIfFullyRedeemed(orderId: string): Promise<voi
   await prisma.order.update({
     where: { id: orderId },
     data: { status: OrderStatus.COMPLETED, completedAt: new Date(), orderStatusLogs: { create: { fromStatus: OrderStatus.CONFIRMED, toStatus: OrderStatus.COMPLETED, reason: 'all tickets redeemed' } } },
+  });
+
+  emitOrderEvent({
+    orderId: order.id,
+    orderNumber: order.orderNumber,
+    status: OrderStatus.COMPLETED,
+    fromStatus: order.status,
+    userId: order.userId,
+    reason: 'all tickets redeemed',
+    totalCents: order.totalCents,
+    currency: order.currency,
   });
 }
 

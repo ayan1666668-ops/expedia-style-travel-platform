@@ -5,13 +5,16 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useState } from 'react';
 import { api, ApiError } from '@/lib/api';
 import { saveSession } from '@/lib/session';
+import type { LocaleCode } from '@/lib/i18n/config';
+import { createTranslator } from '@/lib/i18n/dictionaries';
 
+/** Email is the identity; the label is resolved per locale. */
 const DEMO_ACCOUNTS = [
-  { email: 'traveler@voyahub.test', label: 'Traveler — bookings, tickets, points' },
-  { email: 'admin@voyahub.test', label: 'Admin — dashboard, ledger, staff' },
-  { email: 'operator@voyahub.test', label: 'Gate operator — ticket scanning' },
-  { email: 'merchant@voyahub.test', label: 'Merchant — own products & payouts' },
-];
+  { email: 'traveler@voyahub.test', key: 'auth.demoTraveller' },
+  { email: 'admin@voyahub.test', key: 'auth.demoAdmin' },
+  { email: 'operator@voyahub.test', key: 'auth.demoOperator' },
+  { email: 'merchant@voyahub.test', key: 'auth.demoMerchant' },
+] as const;
 
 function nextPath(raw: string | null): string {
   // Only allow same-origin relative paths so `?next=` can't become an open redirect.
@@ -19,15 +22,16 @@ function nextPath(raw: string | null): string {
   return raw;
 }
 
-export function LoginForm() {
+export function LoginForm({ locale }: { locale: LocaleCode }) {
   return (
     <Suspense fallback={<div className="skeleton" style={{ height: 320 }} />}>
-      <LoginFormInner />
+      <LoginFormInner locale={locale} />
     </Suspense>
   );
 }
 
-function LoginFormInner() {
+function LoginFormInner({ locale }: { locale: LocaleCode }) {
+  const t = createTranslator(locale);
   const router = useRouter();
   const params = useSearchParams();
   const [email, setEmail] = useState('');
@@ -46,7 +50,7 @@ function LoginFormInner() {
       router.push(nextPath(params.get('next')));
       router.refresh();
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : 'Could not sign in. Check your connection.');
+      setError(caught instanceof ApiError ? caught.message : t('auth.couldNotSignIn'));
       setBusy(false);
     }
   }
@@ -55,7 +59,7 @@ function LoginFormInner() {
     <div className="stack">
       <form className="card card-pad stack" onSubmit={submit}>
         <label className="field">
-          <span className="label">Email</span>
+          <span className="label">{t('auth.email')}</span>
           <input
             type="email"
             className="input"
@@ -68,7 +72,7 @@ function LoginFormInner() {
         </label>
 
         <label className="field">
-          <span className="label">Password</span>
+          <span className="label">{t('auth.password')}</span>
           <input
             type="password"
             className="input"
@@ -83,17 +87,17 @@ function LoginFormInner() {
         {error && <p className="form-error">{error}</p>}
 
         <button className="btn btn-primary btn-block" disabled={busy}>
-          {busy ? 'Signing in…' : 'Sign in'}
+          {busy ? t('auth.signingIn') : t('common.signIn')}
         </button>
 
         <p className="small muted center" style={{ margin: 0 }}>
-          New to Voyahub? <Link href="/register">Create an account</Link>
+          {t('auth.noAccount')} <Link href="/register">{t('auth.createAccount')}</Link>
         </p>
       </form>
 
       <details className="card card-pad">
         <summary className="small bold" style={{ cursor: 'pointer' }}>
-          Demo accounts (password <code className="mono">Password123!</code>)
+          {t('auth.demoAccounts')} ({t('auth.demoPassword')} <code className="mono">Password123!</code>)
         </summary>
         <div className="stack-sm" style={{ marginTop: 'var(--sp-3)' }}>
           {DEMO_ACCOUNTS.map((account) => (
@@ -107,7 +111,7 @@ function LoginFormInner() {
               }}
             >
               <span className="mono small bold">{account.email}</span>
-              <span className="tiny subtle">{account.label}</span>
+              <span className="tiny subtle">{t(account.key)}</span>
             </button>
           ))}
         </div>
@@ -116,7 +120,8 @@ function LoginFormInner() {
   );
 }
 
-export function RegisterForm() {
+export function RegisterForm({ locale }: { locale: LocaleCode }) {
+  const t = createTranslator(locale);
   const router = useRouter();
   const [form, setForm] = useState({ firstName: '', lastName: '', email: '', password: '' });
   const [error, setError] = useState<string | null>(null);
@@ -142,7 +147,7 @@ export function RegisterForm() {
       router.push('/orders');
       router.refresh();
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : 'Could not create your account.');
+      setError(caught instanceof ApiError ? caught.message : t('auth.couldNotRegister'));
       setBusy(false);
     }
   }
@@ -151,7 +156,7 @@ export function RegisterForm() {
     <form className="card card-pad stack" onSubmit={submit}>
       <div className="row" style={{ gap: 'var(--sp-3)' }}>
         <label className="field grow">
-          <span className="label">First name</span>
+          <span className="label">{t('auth.firstName')}</span>
           <input
             className="input"
             autoComplete="given-name"
@@ -160,7 +165,7 @@ export function RegisterForm() {
           />
         </label>
         <label className="field grow">
-          <span className="label">Last name</span>
+          <span className="label">{t('auth.lastName')}</span>
           <input
             className="input"
             autoComplete="family-name"
@@ -171,7 +176,7 @@ export function RegisterForm() {
       </div>
 
       <label className="field">
-        <span className="label">Email</span>
+        <span className="label">{t('auth.email')}</span>
         <input
           type="email"
           className="input"
@@ -184,7 +189,7 @@ export function RegisterForm() {
       </label>
 
       <label className="field">
-        <span className="label">Password</span>
+        <span className="label">{t('auth.password')}</span>
         <input
           type="password"
           className="input"
@@ -194,17 +199,17 @@ export function RegisterForm() {
           value={form.password}
           onChange={(event) => update('password', event.target.value)}
         />
-        <span className="tiny subtle">At least 8 characters.</span>
+        <span className="tiny subtle">{t('auth.passwordHint')}</span>
       </label>
 
       {error && <p className="form-error">{error}</p>}
 
       <button className="btn btn-primary btn-block" disabled={busy}>
-        {busy ? 'Creating account…' : 'Create account'}
+        {busy ? t('auth.creatingAccount') : t('auth.createAccount')}
       </button>
 
       <p className="small muted center" style={{ margin: 0 }}>
-        Already have an account? <Link href="/login">Sign in</Link>
+        {t('auth.haveAccount')} <Link href="/login">{t('common.signIn')}</Link>
       </p>
     </form>
   );

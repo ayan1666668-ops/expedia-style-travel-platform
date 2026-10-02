@@ -5,10 +5,13 @@ import { useEffect, useState } from 'react';
 import { api, mediaUrl } from '@/lib/api';
 import { readToken } from '@/lib/session';
 import { formatDate, relativeDay } from '@/lib/format';
+import type { LocaleCode } from '@/lib/i18n/config';
+import { createTranslator } from '@/lib/i18n/dictionaries';
 
 type WalletTicket = Awaited<ReturnType<typeof api.tickets>>[number];
 
-export function TicketWallet() {
+export function TicketWallet({ locale }: { locale: LocaleCode }) {
+  const t = createTranslator(locale);
   const [tickets, setTickets] = useState<WalletTicket[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -18,14 +21,14 @@ export function TicketWallet() {
     const token = readToken();
     if (!token) {
       setLoading(false);
-      setError('Sign in to open your ticket wallet.');
+      setError(t('account.signInToOpenWallet'));
       return;
     }
 
     api
       .tickets(token)
       .then(setTickets)
-      .catch(() => setError('Could not load your tickets.'))
+      .catch(() => setError(t('account.couldNotLoadTickets')))
       .finally(() => setLoading(false));
   }, []);
 
@@ -44,7 +47,7 @@ export function TicketWallet() {
       <div className="card card-pad center stack">
         <p className="muted">{error}</p>
         <Link href="/login?next=/tickets" className="btn btn-primary">
-          Sign in
+          {t('common.signIn')}
         </Link>
       </div>
     );
@@ -56,12 +59,12 @@ export function TicketWallet() {
         <div style={{ fontSize: 40 }} aria-hidden>
           🎟️
         </div>
-        <h3>Your wallet is empty</h3>
+        <h3>{t('account.noTickets')}</h3>
         <p className="muted" style={{ maxWidth: 380 }}>
-          Every booking puts a scannable e-ticket here, ready for the gate.
+          {t('account.noTicketsHint')}
         </p>
         <Link href="/search" className="btn btn-primary">
-          Find something to do
+          {t('account.findSomething')}
         </Link>
       </div>
     );
@@ -81,7 +84,9 @@ export function TicketWallet() {
               </div>
             </div>
             <span className="badge" style={{ background: 'rgba(255,255,255,0.2)', color: '#fff' }}>
-              {ticket.status === 'REDEEMED' ? 'Used' : relativeDay(ticket.serviceDate)}
+              {ticket.status === 'REDEEMED'
+                ? t('account.used')
+                : relativeDay(ticket.serviceDate, new Date(), locale)}
             </span>
           </div>
 
@@ -92,16 +97,16 @@ export function TicketWallet() {
               <img src={mediaUrl(ticket.qrImageUrl) ?? ''} alt={`QR code for ticket ${ticket.ticketNumber}`} className="ticket-qr" />
             ) : (
               <div className="ticket-qr" style={{ display: 'grid', placeItems: 'center', fontSize: 11 }}>
-                QR unavailable
+                {t('account.qrUnavailable')}
               </div>
             )}
 
             <div className="stack-sm" style={{ minWidth: 0 }}>
-              <div className="small bold">{formatDate(ticket.serviceDate)}</div>
+              <div className="small bold">{formatDate(ticket.serviceDate, locale)}</div>
               {ticket.timeSlot && <div className="tiny subtle">{ticket.timeSlot}</div>}
               <div className="tiny subtle">{ticket.holderName}</div>
               <div className="ticket-number">{ticket.ticketNumber}</div>
-              <div className="row" style={{ gap: 'var(--sp-2)', marginTop: 'auto', paddingTop: 'var(--sp-2)' }}>
+              <div className="row ticket-pass-actions" style={{ gap: 'var(--sp-2)', marginTop: 'auto', paddingTop: 'var(--sp-2)' }}>
                 {mediaUrl(ticket.pdfUrl) && (
                   <a href={mediaUrl(ticket.pdfUrl) ?? '#'} className="btn btn-secondary btn-sm" download>
                     PDF
@@ -133,7 +138,7 @@ export function TicketWallet() {
                 />
               ))}
             <button className="btn btn-primary btn-block" style={{ marginTop: 'var(--sp-4)' }} onClick={() => setScan(null)}>
-              Close
+              {t('common.close')}
             </button>
           </div>
         </div>

@@ -1,111 +1,20 @@
 'use client';
 
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState } from 'react';
 import { api, type DashboardData } from '@/lib/api';
+import { LiveInventoryAlerts } from '@/components/LiveInventoryAlerts';
 import { readToken } from '@/lib/session';
 import { formatDate, formatMoney } from '@/lib/format';
+import type { LocaleCode } from '@/lib/i18n/config';
+import { createTranslator } from '@/lib/i18n/dictionaries';
 
 /**
- * Shared chrome for the three operator consoles. Every screen needs the token
- * from localStorage, so the gate lives here rather than in each page.
+ * Dashboard content for the operations console.
+ *
+ * The chrome (sidebar, role gate) lives in `ConsoleShell`; this file is only
+ * the data view. Keeping them apart means the admin and support consoles can
+ * share one shell without this file having to know which surface it is on.
  */
-export function AdminShell({
-  active,
-  title,
-  subtitle,
-  children,
-}: {
-  active: 'dashboard' | 'finance' | 'scan';
-  title: string;
-  subtitle: string;
-  children: ReactNode;
-}) {
-  const router = useRouter();
-  const [token, setToken] = useState<string | null>(null);
-  const [ready, setReady] = useState(false);
-
-  useEffect(() => {
-    const stored = readToken();
-    if (!stored) {
-      router.replace('/login?next=/admin');
-      return;
-    }
-    setToken(stored);
-    setReady(true);
-  }, [router]);
-
-  const links: { key: typeof active; label: string; href: string }[] = [
-    { key: 'dashboard', label: 'Overview', href: '/admin' },
-    { key: 'finance', label: 'Finance', href: '/admin/finance' },
-    { key: 'scan', label: 'Gate scanner', href: '/admin/scan' },
-  ];
-
-  return (
-    <div className="container" style={{ paddingTop: 'var(--sp-6)', paddingBottom: 'var(--sp-7)' }}>
-      <div className="row-between wrap" style={{ marginBottom: 'var(--sp-4)' }}>
-        <div>
-          <span className="badge badge-neutral">Operations</span>
-          <h1 style={{ margin: '6px 0 2px' }}>{title}</h1>
-          <p className="muted small" style={{ margin: 0 }}>
-            {subtitle}
-          </p>
-        </div>
-        <nav className="tabs">
-          {links.map((link) => (
-            <Link key={link.key} href={link.href} className={`tab ${active === link.key ? 'active' : ''}`}>
-              {link.label}
-            </Link>
-          ))}
-        </nav>
-      </div>
-
-      {!ready ? <div className="skeleton" style={{ height: 320 }} /> : <AdminGuard token={token}>{children}</AdminGuard>}
-    </div>
-  );
-}
-
-/** Distinguishes "not signed in" from "signed in but wrong role". */
-function AdminGuard({ token, children }: { token: string | null; children: ReactNode }) {
-  const [me, setMe] = useState<Awaited<ReturnType<typeof api.me>> | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!token) return;
-    api
-      .me(token)
-      .then(setMe)
-      .catch(() => setError('Could not verify your session.'));
-  }, [token]);
-
-  if (error) {
-    return (
-      <div className="card card-pad center stack">
-        <p className="muted">{error}</p>
-        <Link href="/login" className="btn btn-primary">
-          Sign in again
-        </Link>
-      </div>
-    );
-  }
-
-  if (!me) return <div className="skeleton" style={{ height: 240 }} />;
-
-  if (!['ADMIN', 'MERCHANT', 'OPERATOR'].includes(me.role)) {
-    return (
-      <div className="empty-state">
-        <h3>Staff access only</h3>
-        <p className="muted" style={{ maxWidth: 380 }}>
-          This console is limited to Voyahub staff. Customer accounts can manage bookings from{' '}
-          <Link href="/orders">My bookings</Link>.
-        </p>
-      </div>
-    );
-  }
-
-  return <>{children}</>;
-}
 
 export function KpiCard({ label, value, hint, tone }: { label: string; value: string; hint?: string; tone?: 'good' | 'warn' }) {
   return (
@@ -119,7 +28,8 @@ export function KpiCard({ label, value, hint, tone }: { label: string; value: st
   );
 }
 
-export function AdminDashboardBody() {
+export function AdminDashboardBody({ locale }: { locale: LocaleCode }) {
+  const t = createTranslator(locale);
   const [data, setData] = useState<DashboardData | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -129,43 +39,55 @@ export function AdminDashboardBody() {
     api
       .adminDashboard(token)
       .then(setData)
-      .catch(() => setError('You do not have access to the dashboard.'));
-  }, []);
+      .catch(() => setError(t('staff.noDashboardAccess')));
+  }, [t]);
 
   if (error) return <p className="muted">{error}</p>;
   if (!data) return <div className="skeleton" style={{ height: 300 }} />;
 
   return (
     <div className="stack-lg">
+      {/* Pushed over the WebSocket — surfaced above the snapshot KPIs because a
+          departure selling out right now is the most actionable thing here. */}
+      <LiveInventoryAlerts locale={locale} />
+
       <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
         <KpiCard
-          label="Gross revenue (30d)"
-          value={formatMoney(data.kpis.grossRevenueCents, 'USD')}
-          hint={`${formatMoney(data.kpis.netRevenueCents, 'USD')} net of refunds`}
+          label={t('staff.grossRevenue')}
+          value={formatMoney(data.kpis.grossRevenueCents, 'USD', locale)}
+          hint={`${formatMoney(data.kpis.netRevenueCents, 'USD', locale)} ${t('staff.netOfRefunds')}`}
         />
-        <KpiCard label="Orders (30d)" value={String(data.kpis.orders30d)} hint={`${data.kpis.refundRate}% refund rate`} tone={data.kpis.refundRate > 8 ? 'warn' : undefined} />
-        <KpiCard label="Average order" value={formatMoney(data.kpis.averageOrderValueCents, 'USD')} />
         <KpiCard
-          label="Pending ops"
+          label={t('staff.orders30d')}
+          value={String(data.kpis.orders30d)}
+          hint={t('staff.refundRate', data.kpis.refundRate)}
+          tone={data.kpis.refundRate > 8 ? 'warn' : undefined}
+        />
+        <KpiCard
+          label={t('staff.averageOrder')}
+          value={formatMoney(data.kpis.averageOrderValueCents, 'USD', locale)}
+        />
+        <KpiCard
+          label={t('staff.pendingOps')}
           value={String(data.kpis.pendingOperations)}
-          hint={data.kpis.pendingOperations > 0 ? 'Needs a human' : 'All clear'}
+          hint={data.kpis.pendingOperations > 0 ? t('staff.needsHuman') : t('staff.allClear')}
           tone={data.kpis.pendingOperations > 0 ? 'warn' : 'good'}
         />
       </div>
 
       <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))' }}>
         <section className="card card-pad stack">
-          <h2 style={{ fontSize: 17 }}>Recent orders</h2>
+          <h2 style={{ fontSize: 17 }}>{t('staff.recentOrders')}</h2>
           {data.recentOrders.length === 0 ? (
-            <p className="muted small">No orders yet.</p>
+            <p className="muted small">{t('staff.noOrdersYet')}</p>
           ) : (
             <table className="table">
               <thead>
                 <tr>
-                  <th>Order</th>
-                  <th>Customer</th>
-                  <th>Placed</th>
-                  <th className="right">Total</th>
+                  <th>{t('staff.order')}</th>
+                  <th>{t('staff.customer')}</th>
+                  <th>{t('staff.placed')}</th>
+                  <th className="right">{t('staff.total')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -173,8 +95,10 @@ export function AdminDashboardBody() {
                   <tr key={order.id}>
                     <td className="mono small">{order.orderNumber}</td>
                     <td className="small truncate">{order.customer}</td>
-                    <td className="tiny subtle">{formatDate(order.placedAt)}</td>
-                    <td className="right bold small">{formatMoney(order.totalCents, order.currency)}</td>
+                    <td className="tiny subtle">{formatDate(order.placedAt, locale)}</td>
+                    <td className="right bold small">
+                      {formatMoney(order.totalCents, order.currency, locale)}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -183,16 +107,16 @@ export function AdminDashboardBody() {
         </section>
 
         <section className="card card-pad stack">
-          <h2 style={{ fontSize: 17 }}>Top products</h2>
+          <h2 style={{ fontSize: 17 }}>{t('staff.topProducts')}</h2>
           {data.topProducts.length === 0 ? (
-            <p className="muted small">No sales yet.</p>
+            <p className="muted small">{t('staff.noSalesYet')}</p>
           ) : (
             <table className="table">
               <thead>
                 <tr>
-                  <th>Product</th>
-                  <th className="right">Units</th>
-                  <th className="right">Revenue</th>
+                  <th>{t('staff.product')}</th>
+                  <th className="right">{t('staff.units')}</th>
+                  <th className="right">{t('staff.revenue')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -200,7 +124,9 @@ export function AdminDashboardBody() {
                   <tr key={product.productId}>
                     <td className="small truncate">{product.productName}</td>
                     <td className="right small">{product.units}</td>
-                    <td className="right bold small">{formatMoney(product.revenueCents, 'USD')}</td>
+                    <td className="right bold small">
+                      {formatMoney(product.revenueCents, 'USD', locale)}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -210,17 +136,17 @@ export function AdminDashboardBody() {
       </div>
 
       <section className="card card-pad stack">
-        <h2 style={{ fontSize: 17 }}>Inventory running low</h2>
+        <h2 style={{ fontSize: 17 }}>{t('staff.lowInventory')}</h2>
         {data.criticalInventory.length === 0 ? (
-          <p className="muted small">Nothing critical in the next 14 days.</p>
+          <p className="muted small">{t('staff.nothingCritical')}</p>
         ) : (
           <table className="table">
             <thead>
               <tr>
-                <th>Product</th>
-                <th>Date</th>
-                <th className="right">Remaining</th>
-                <th className="right">Capacity</th>
+                <th>{t('staff.product')}</th>
+                <th>{t('staff.date')}</th>
+                <th className="right">{t('staff.remaining')}</th>
+                <th className="right">{t('staff.capacity')}</th>
               </tr>
             </thead>
             <tbody>
@@ -228,7 +154,7 @@ export function AdminDashboardBody() {
                 <tr key={`${row.ticketTypeId}-${row.serviceDate}-${row.timeSlot ?? ''}`}>
                   <td className="small truncate">{row.productName}</td>
                   <td className="tiny">
-                    {formatDate(row.serviceDate)}
+                    {formatDate(row.serviceDate, locale)}
                     {row.timeSlot ? ` · ${row.timeSlot}` : ''}
                   </td>
                   <td className="right">

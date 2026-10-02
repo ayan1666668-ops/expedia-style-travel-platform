@@ -6,6 +6,9 @@ import { Breadcrumbs, EmptyState, TrustBar } from '@/components/PageShell';
 import { BookingPanel } from '@/components/BookingPanel';
 import { AvailabilityCalendar } from '@/components/AvailabilityCalendar';
 import { ReviewSection } from '@/components/ReviewSection';
+import { resolveServerLocale } from '@/lib/i18n/config';
+import { createTranslator } from '@/lib/i18n/dictionaries';
+import type { LocaleCode } from '@/lib/i18n/config';
 
 type PageProps = {
   params: Promise<{ slug: string }>;
@@ -18,8 +21,10 @@ function first(value: string | string[] | undefined): string | undefined {
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { slug } = await params;
+  const locale = await resolveServerLocale();
+  const t = createTranslator(locale);
   const product = await api.product(slug).catch(() => null);
-  if (!product) return { title: 'Experience not found' };
+  if (!product) return { title: t('product.notFound') };
 
   return {
     title: product.name,
@@ -35,6 +40,8 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 export default async function ProductPage({ params, searchParams }: PageProps) {
   const { slug } = await params;
   const query = await searchParams;
+  const locale = await resolveServerLocale();
+  const t = createTranslator(locale);
 
   const selectedDate = first(query.date);
   const quantity = Number(first(query.quantity) ?? 1);
@@ -57,7 +64,7 @@ export default async function ProductPage({ params, searchParams }: PageProps) {
     <div className="container" style={{ paddingTop: 'var(--sp-5)', paddingBottom: 'var(--sp-7)' }}>
       <Breadcrumbs
         items={[
-          { label: 'Experiences', href: '/search' },
+          { label: t('nav.experiences'), href: '/search' },
           ...(product.destination
             ? [{ label: product.destination.parent ?? product.destination.name, href: `/search?destination=${product.destination.slug}` }]
             : []),
@@ -71,10 +78,18 @@ export default async function ProductPage({ params, searchParams }: PageProps) {
       {/* ------------------------------------------------------------------ */}
       <div style={{ marginBottom: 'var(--sp-5)' }}>
         <div className="row wrap" style={{ gap: 'var(--sp-2)', marginBottom: 'var(--sp-2)' }}>
-          {product.flags.skipTheLine && <span className="badge badge-brand">Skip the line</span>}
-          {product.flags.instantConfirm && <span className="badge badge-positive">Instant confirmation</span>}
-          {product.flags.freeCancellation && <span className="badge badge-neutral">Free cancellation</span>}
-          {product.flags.mobileTicket && <span className="badge badge-neutral">Mobile ticket</span>}
+          {product.flags.skipTheLine && (
+            <span className="badge badge-brand">{t('search.skipTheLine')}</span>
+          )}
+          {product.flags.instantConfirm && (
+            <span className="badge badge-positive">{t('search.instantConfirm')}</span>
+          )}
+          {product.flags.freeCancellation && (
+            <span className="badge badge-neutral">{t('search.freeCancellation')}</span>
+          )}
+          {product.flags.mobileTicket && (
+            <span className="badge badge-neutral">{t('product.mobileTicket')}</span>
+          )}
         </div>
 
         <div className="row-between wrap" style={{ gap: 'var(--sp-4)' }}>
@@ -96,7 +111,7 @@ export default async function ProductPage({ params, searchParams }: PageProps) {
                 {product.rating.average.toFixed(1)}
               </div>
               <a href="#reviews" className="tiny" style={{ color: 'var(--brand-600)' }}>
-                {product.rating.count.toLocaleString()} reviews
+                {t('product.reviewsCount', product.rating.count)}
               </a>
             </div>
           )}
@@ -106,19 +121,23 @@ export default async function ProductPage({ params, searchParams }: PageProps) {
       {/* ------------------------------------------------------------------ */}
       {/* Gallery                                                           */}
       {/* ------------------------------------------------------------------ */}
-      <Gallery media={product.media} name={product.name} />
+      <Gallery media={product.media} name={product.name} morePhotosLabel={t('product.morePhotos')} />
 
-      <div className="row" style={{ alignItems: 'flex-start', gap: 'var(--sp-6)', marginTop: 'var(--sp-6)' }}>
+      <div className="with-rail" style={{ marginTop: 'var(--sp-6)' }}>
         {/* ---------------------------------------------------------------- */}
         {/* Main column                                                      */}
         {/* ---------------------------------------------------------------- */}
-        <div className="grow stack-lg" style={{ minWidth: 0 }}>
+        <div className="with-rail-main stack-lg">
           <TrustBar
             items={[
-              product.flags.instantConfirm ? 'Instant confirmation' : 'Confirmed within 24h',
-              product.flags.freeCancellation ? 'Free cancellation' : 'Cancellation available',
-              'Mobile ticket accepted',
-              'Secure payment',
+              product.flags.instantConfirm
+                ? t('search.instantConfirm')
+                : t('product.trustConfirmed24h'),
+              product.flags.freeCancellation
+                ? t('search.freeCancellation')
+                : t('product.trustCancelAvailable'),
+              t('product.trustMobile'),
+              t('product.trustSecure'),
             ]}
           />
 
@@ -126,7 +145,7 @@ export default async function ProductPage({ params, searchParams }: PageProps) {
           {product.highlights.length > 0 && (
             <section className="card card-pad">
               <h2 style={{ fontSize: 18, marginBottom: 'var(--sp-3)' }}>
-                What you&rsquo;ll do
+                {t('product.whatYoullDo')}
               </h2>
               <ul className="stack-sm" style={{ margin: 0, paddingLeft: 0, listStyle: 'none' }}>
                 {product.highlights.map((highlight) => (
@@ -145,7 +164,7 @@ export default async function ProductPage({ params, searchParams }: PageProps) {
           {product.description && (
             <section className="card card-pad">
               <h2 style={{ fontSize: 18, marginBottom: 'var(--sp-3)' }}>
-                About this experience
+                {t('product.description')}
               </h2>
               <p style={{ whiteSpace: 'pre-line' }}>{product.description}</p>
             </section>
@@ -154,26 +173,31 @@ export default async function ProductPage({ params, searchParams }: PageProps) {
           {/* Calendar */}
           <section className="card card-pad stack">
             <div className="row-between">
-              <h2 style={{ fontSize: 18 }}>Pick your date</h2>
+              <h2 style={{ fontSize: 18 }}>{t('product.pickDate')}</h2>
               {selectedDate && (
                 <a href={`/products/${slug}`} className="tiny" style={{ color: 'var(--brand-600)', fontWeight: 600 }}>
-                  Clear date
+                  {t('product.clearDate')}
                 </a>
               )}
             </div>
             {availability.days.length === 0 ? (
               <p className="small muted" style={{ margin: 0 }}>
-                No availability published for this experience right now.
+                {t('product.noAvailability')}
               </p>
             ) : (
-              <AvailabilityCalendar slug={slug} days={availability.days} selected={activeDate} />
+              <AvailabilityCalendar
+                slug={slug}
+                days={availability.days}
+                selected={activeDate}
+                locale={locale}
+              />
             )}
           </section>
 
           {/* Meeting point */}
           {product.meetingPoint && (
             <section className="card card-pad stack">
-              <h2 style={{ fontSize: 18 }}>Meeting point</h2>
+              <h2 style={{ fontSize: 18 }}>{t('product.meetingPoint')}</h2>
               <p className="muted" style={{ margin: 0 }}>
                 {product.meetingPoint}
               </p>
@@ -183,7 +207,7 @@ export default async function ProductPage({ params, searchParams }: PageProps) {
                 </p>
               )}
               {product.flags.wheelchairAccessible && (
-                <span className="badge badge-positive">Wheelchair accessible</span>
+                <span className="badge badge-positive">{t('product.wheelchairAccessible')}</span>
               )}
             </section>
           )}
@@ -192,7 +216,7 @@ export default async function ProductPage({ params, searchParams }: PageProps) {
           <section className="card card-pad">
             <div className="grid grid-2" style={{ gap: 'var(--sp-5)' }}>
               <div className="stack-sm">
-                <h3 style={{ fontSize: 16 }}>Included</h3>
+                <h3 style={{ fontSize: 16 }}>{t('product.included')}</h3>
                 <ul style={{ margin: 0, paddingLeft: 18 }} className="small stack-sm">
                   {product.includes.map((item) => (
                     <li key={item}>{item}</li>
@@ -200,7 +224,7 @@ export default async function ProductPage({ params, searchParams }: PageProps) {
                 </ul>
               </div>
               <div className="stack-sm">
-                <h3 style={{ fontSize: 16 }}>Not included</h3>
+                <h3 style={{ fontSize: 16 }}>{t('product.excluded')}</h3>
                 <ul style={{ margin: 0, paddingLeft: 18 }} className="small stack-sm">
                   {product.excludes.map((item) => (
                     <li key={item}>{item}</li>
@@ -213,41 +237,53 @@ export default async function ProductPage({ params, searchParams }: PageProps) {
           {/* Cancellation policy */}
           {product.cancellationPolicy && (
             <section className="card card-pad stack">
-              <h2 style={{ fontSize: 18 }}>Cancellation policy</h2>
+              <h2 style={{ fontSize: 18 }}>{t('product.cancellationPolicy')}</h2>
               {product.cancellationPolicy.description && (
                 <p className="muted" style={{ margin: 0 }}>
                   {product.cancellationPolicy.description}
                 </p>
               )}
-              <RefundTable tiers={product.cancellationPolicy.tiers} />
+              <RefundTable tiers={product.cancellationPolicy.tiers} locale={locale} />
             </section>
           )}
 
           {/* Important info */}
           <section className="card card-pad stack">
-            <h2 style={{ fontSize: 18 }}>Good to know</h2>
+            <h2 style={{ fontSize: 18 }}>{t('product.goodToKnow')}</h2>
             <div className="grid grid-2" style={{ gap: 'var(--sp-3)' }}>
               {product.flags.durationMinutes && (
-                <InfoRow label="Duration" value={`${Math.round(product.flags.durationMinutes / 60 * 10) / 10} hours`} />
+                <InfoRow
+                  label={t('product.duration')}
+                  value={t('product.hoursCount', Math.round((product.flags.durationMinutes / 60) * 10) / 10)}
+                />
               )}
               {product.flags.languages.length > 0 && (
-                <InfoRow label="Languages" value={product.flags.languages.join(', ')} />
+                <InfoRow label={t('product.languages')} value={product.flags.languages.join(', ')} />
               )}
-              {product.flags.minAge !== null && <InfoRow label="Minimum age" value={`${product.flags.minAge} years`} />}
-              {product.merchant && <InfoRow label="Operated by" value={product.merchant.name} />}
-              {product.destination?.countryCode && <InfoRow label="Country" value={product.destination.countryCode} />}
+              {product.flags.minAge !== null && (
+                <InfoRow label={t('product.minimumAge')} value={t('product.years', product.flags.minAge)} />
+              )}
+              {product.merchant && <InfoRow label={t('product.operatedBy')} value={product.merchant.name} />}
+              {product.destination?.countryCode && (
+                <InfoRow label={t('product.country')} value={product.destination.countryCode} />
+              )}
             </div>
           </section>
 
           {/* Reviews */}
           <div id="reviews">
-            <ReviewSection slug={product.slug} reviews={product.reviews} rating={product.rating} />
+            <ReviewSection
+              slug={product.slug}
+              reviews={product.reviews}
+              rating={product.rating}
+              locale={locale}
+            />
           </div>
 
           {/* Similar */}
           {product.similar.length > 0 && (
             <section className="stack">
-              <h2 style={{ fontSize: 18 }}>You might also like</h2>
+              <h2 style={{ fontSize: 18 }}>{t('product.similar')}</h2>
               <div className="stack">
                 {product.similar.slice(0, 4).map((item) => (
                   <a
@@ -267,7 +303,9 @@ export default async function ProductPage({ params, searchParams }: PageProps) {
                     <div className="grow" style={{ minWidth: 0 }}>
                       <div className="bold small truncate">{item.title}</div>
                       <div className="tiny subtle">
-                        {item.ratingCount > 0 ? `★ ${item.ratingAvg.toFixed(1)} (${item.ratingCount})` : 'New listing'}
+                        {item.ratingCount > 0
+                          ? `★ ${item.ratingAvg.toFixed(1)} (${item.ratingCount})`
+                          : t('product.newListing')}
                       </div>
                     </div>
                     <div className="bold nowrap">{formatMoney(item.priceCents, item.currency)}</div>
@@ -281,12 +319,13 @@ export default async function ProductPage({ params, searchParams }: PageProps) {
         {/* ---------------------------------------------------------------- */}
         {/* Sticky booking panel                                            */}
         {/* ---------------------------------------------------------------- */}
-        <div style={{ width: 348, flexShrink: 0 }} className="booking-panel-col">
+        <div className="with-rail-side with-rail-side-wide booking-panel-col">
           <BookingPanel
             product={product}
             selectedDate={activeDate}
             quantity={quantity}
             lowestPrice={cheapest === Number.MAX_SAFE_INTEGER ? null : cheapest}
+            locale={locale}
           />
         </div>
       </div>
@@ -296,7 +335,15 @@ export default async function ProductPage({ params, searchParams }: PageProps) {
 
 // ---------------------------------------------------------------------------
 
-function Gallery({ media, name }: { media: ProductDetail['media']; name: string }) {
+function Gallery({
+  media,
+  name,
+  morePhotosLabel,
+}: {
+  media: ProductDetail['media'];
+  name: string;
+  morePhotosLabel: string;
+}) {
   const [hero, ...rest] = media;
 
   if (!hero) {
@@ -329,7 +376,7 @@ function Gallery({ media, name }: { media: ProductDetail['media']; name: string 
             className="card"
             style={{ display: 'grid', placeItems: 'center', color: 'var(--text-muted)', minHeight: 180 }}
           >
-            More photos on request
+            {morePhotosLabel}
           </div>
         )}
       </div>
@@ -347,8 +394,16 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 }
 
 /** Renders the tiered refund table from the cancellation policy. */
-function RefundTable({ tiers }: { tiers: { minHoursBefore: number; refundBps: number }[] }) {
+function RefundTable({
+  tiers,
+  locale,
+}: {
+  tiers: { minHoursBefore: number; refundBps: number }[];
+  locale: LocaleCode;
+}) {
   if (!tiers || tiers.length === 0) return null;
+
+  const t = createTranslator(locale);
 
   const sorted = [...tiers].sort((a, b) => b.minHoursBefore - a.minHoursBefore);
   const ordered = [...sorted].reverse();
@@ -359,15 +414,19 @@ function RefundTable({ tiers }: { tiers: { minHoursBefore: number; refundBps: nu
         const next = ordered[index + 1];
         const label =
           tier.minHoursBefore === 0
-            ? 'Less than 24 hours before'
+            ? t('product.lessThan24h')
             : next
-              ? `${formatNotice(tier.minHoursBefore)} – ${formatNotice(next.minHoursBefore)} before`
-              : `More than ${formatNotice(tier.minHoursBefore)} before`;
+              ? t(
+                  'product.beforeRange',
+                  formatNotice(tier.minHoursBefore, t),
+                  formatNotice(next.minHoursBefore, t),
+                )
+              : t('product.moreThanBefore', formatNotice(tier.minHoursBefore, t));
 
         return (
           <div key={tier.minHoursBefore} className="row-between small" style={{ gap: 'var(--sp-3)' }}>
             <span className="muted">{label}</span>
-            <span className="bold nowrap">{Math.round(tier.refundBps / 100)}% refund</span>
+            <span className="bold nowrap">{t('product.refundPercent', Math.round(tier.refundBps / 100))}</span>
           </div>
         );
       })}
@@ -375,8 +434,8 @@ function RefundTable({ tiers }: { tiers: { minHoursBefore: number; refundBps: nu
   );
 }
 
-function formatNotice(hours: number): string {
-  if (hours >= 72 && hours % 24 === 0 && hours >= 48) return `${hours / 24} days`;
-  if (hours >= 24) return `${hours} hours`;
-  return `${hours}h`;
+function formatNotice(hours: number, t: (key: string, ...args: unknown[]) => string): string {
+  if (hours >= 72 && hours % 24 === 0 && hours >= 48) return t('product.daysCount', hours / 24);
+  if (hours >= 24) return t('product.hoursCount', hours);
+  return t('product.hoursShort', hours);
 }

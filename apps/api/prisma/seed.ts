@@ -520,6 +520,11 @@ async function main() {
   // -------------------------------------------------------------------------
   await ensureStaff();
 
+  // -------------------------------------------------------------------------
+  // 9. Promo banners so the storefront strip has something to render
+  // -------------------------------------------------------------------------
+  await seedPromoBanners();
+
   logger.info('seed.done');
 }
 
@@ -551,6 +556,9 @@ async function ensureStaff() {
     { email: 'admin@voyahub.test', role: UserRole.ADMIN, firstName: 'Ops', lastName: 'Admin' },
     { email: 'operator@voyahub.test', role: UserRole.OPERATOR, firstName: 'Gate', lastName: 'Staff' },
     { email: 'merchant@voyahub.test', role: UserRole.MERCHANT, firstName: 'Partner', lastName: 'Manager' },
+    // SUPPORT sits below ADMIN: able to fix a customer's record and issue a
+    // goodwill refund, unable to touch pricing or simulate payments.
+    { email: 'support@voyahub.test', role: UserRole.SUPPORT, firstName: 'Casey', lastName: 'Support' },
   ];
 
   for (const person of staff) {
@@ -574,6 +582,75 @@ async function ensureStaff() {
   if (merchantUser && partner && !partner.ownerUserId) {
     await prisma.merchant.update({ where: { id: partner.id }, data: { ownerUserId: merchantUser.id } });
   }
+}
+
+/**
+ * Promo banners for the storefront strip.
+ *
+ * Idempotent by (slot, titleEn): re-running the seed updates copy in place
+ * rather than stacking duplicates on the homepage.
+ */
+async function seedPromoBanners(): Promise<void> {
+  const banners = [
+    {
+      slot: 'home',
+      titleEn: 'Fall city breaks — up to 30% off',
+      titleZh: '秋季城市短途游 — 低至 7 折',
+      bodyEn: 'Hand-picked stays and experiences in 12 European capitals.',
+      bodyZh: '精选 12 座欧洲首都的住宿与体验项目。',
+      ctaLabelEn: 'Browse city breaks',
+      ctaLabelZh: '浏览城市短途游',
+      ctaHref: '/search?q=city',
+      theme: 'brand',
+      sortOrder: 10,
+      locales: [],
+      markets: [],
+    },
+    {
+      slot: 'home',
+      titleEn: 'New: use code WELCOME10 at checkout',
+      titleZh: '新用户专享：结账输入 WELCOME10',
+      bodyEn: '10% off your first booking, capped at $50.',
+      bodyZh: '首次预订享 9 折，最高减免 50 美元。',
+      ctaLabelEn: 'See terms',
+      ctaLabelZh: '查看条款',
+      ctaHref: '/promo',
+      theme: 'accent',
+      sortOrder: 20,
+      locales: [],
+      markets: [],
+    },
+    {
+      slot: 'home',
+      titleEn: 'North America: free cancellation on most tours',
+      titleZh: '北美地区：多数行程免费取消',
+      bodyEn: 'Book with confidence — cancel up to 24 hours before departure.',
+      bodyZh: '放心预订 — 出发前 24 小时可免费取消。',
+      ctaLabelEn: 'Explore tours',
+      ctaLabelZh: '探索行程',
+      ctaHref: '/search',
+      theme: 'success',
+      sortOrder: 30,
+      // Only shown to the North American market, to demonstrate targeting.
+      locales: [],
+      markets: ['US', 'CA', 'MX'],
+    },
+  ];
+
+  for (const banner of banners) {
+    const existing = await prisma.promoBanner.findFirst({
+      where: { slot: banner.slot, titleEn: banner.titleEn },
+      select: { id: true },
+    });
+
+    if (existing) {
+      await prisma.promoBanner.update({ where: { id: existing.id }, data: banner });
+    } else {
+      await prisma.promoBanner.create({ data: banner });
+    }
+  }
+
+  logger.info('seed.promo_banners', { count: banners.length });
 }
 
 async function recomputeRatings(productId: string): Promise<void> {

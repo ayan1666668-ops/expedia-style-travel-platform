@@ -60,8 +60,17 @@ export function requireRole(...roles: string[]) {
   };
 }
 
-/** Standalone hook for routes that only need an authenticated user. */
-export function authenticated(request: FastifyRequest, _reply: FastifyReply): void {
+/**
+ * Standalone hook for routes that only need an authenticated user.
+ *
+ * Must be `async`. A plain synchronous hook that returns `undefined` is treated
+ * by Fastify as callback-style, so it waits for a `done` callback that never
+ * arrives — the request then hangs forever with no log line. Throwing is the
+ * only case that still works, which is what makes the mistake so easy to miss:
+ * unauthenticated calls fail fast with a 401, and authenticated ones hang.
+ * `requireRole` avoided this only because it happens to be `async`.
+ */
+export async function authenticated(request: FastifyRequest): Promise<void> {
   requireAuth(request);
 }
 
@@ -70,6 +79,16 @@ export function resolveLocale(request: FastifyRequest): string {
   const supported = config.site.supportedLocales as readonly string[];
   const explicit = (request.query as Record<string, string> | undefined)?.locale;
   if (explicit && supported.includes(explicit)) return explicit;
+
+  // The storefront speaks bare language tags ("en", "zh") while the API stores
+  // full tags ("en-US", "zh-CN"). Match on the language subtag rather than
+  // rejecting the request and silently serving English.
+  if (explicit) {
+    const language = explicit.split('-')[0]!.toLowerCase();
+    const regional = supported.find((code) => code.split('-')[0]!.toLowerCase() === language);
+    if (regional) return regional;
+  }
+
   if (request.user?.locale && supported.includes(request.user.locale)) {
     return request.user.locale;
   }

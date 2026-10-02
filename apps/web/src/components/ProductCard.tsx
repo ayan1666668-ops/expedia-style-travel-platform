@@ -1,15 +1,18 @@
 import Link from 'next/link';
 import type { SearchHit } from '@/lib/api';
 import { discountPercent, formatMoney, stars } from '@/lib/format';
+import type { LocaleCode } from '@/lib/i18n/config';
+import { createTranslator } from '@/lib/i18n/dictionaries';
 
-function priceNote(hit: SearchHit): string {
-  if (hit.freeCancellation) return 'Free cancellation';
-  if (hit.instantConfirm) return 'Instant confirmation';
-  return 'Confirmation required';
-}
-
-export function ProductCard({ hit }: { hit: SearchHit }) {
+export function ProductCard({ hit, locale }: { hit: SearchHit; locale: LocaleCode }) {
+  const t = createTranslator(locale);
   const off = discountPercent(hit.priceCents, hit.compareAtPriceCents);
+
+  const priceNote = hit.freeCancellation
+    ? t('search.freeCancellation')
+    : hit.instantConfirm
+      ? t('search.instantConfirm')
+      : t('product.confirmationRequired');
 
   return (
     <article className="product-card">
@@ -59,16 +62,20 @@ export function ProductCard({ hit }: { hit: SearchHit }) {
             </span>
           )}
 
-          {hit.skipTheLine && <span className="badge badge-brand">Skip the line</span>}
-          {hit.freeCancellation && <span className="badge badge-positive">Free cancellation</span>}
+          {hit.skipTheLine && <span className="badge badge-brand">{t('search.skipTheLine')}</span>}
+          {hit.freeCancellation && (
+            <span className="badge badge-positive">{t('search.freeCancellation')}</span>
+          )}
           {hit.instantConfirm && !hit.freeCancellation && !hit.skipTheLine && (
-            <span className="badge badge-neutral">Instant confirmation</span>
+            <span className="badge badge-neutral">{t('search.instantConfirm')}</span>
           )}
         </div>
 
         <div className="row wrap" style={{ gap: 'var(--sp-2)', marginTop: 'auto' }}>
-          <span className="tiny subtle">{priceNote(hit)}</span>
-          {hit.distanceKm !== null && <span className="tiny subtle">· {hit.distanceKm.toFixed(1)} km away</span>}
+          <span className="tiny subtle">{priceNote}</span>
+          {hit.distanceKm !== null && (
+            <span className="tiny subtle">· {t('product.kmAway', hit.distanceKm)}</span>
+          )}
         </div>
       </div>
 
@@ -83,7 +90,7 @@ export function ProductCard({ hit }: { hit: SearchHit }) {
           {hit.compareAtPriceCents && off && (
             <div className="price-was">{formatMoney(hit.compareAtPriceCents, hit.currency)}</div>
           )}
-          <div className="price-note">per person</div>
+          <div className="price-note">{t('common.perPerson')}</div>
         </div>
 
         <Link
@@ -91,7 +98,7 @@ export function ProductCard({ hit }: { hit: SearchHit }) {
           className="btn btn-secondary btn-sm"
           style={{ marginTop: 'var(--sp-3)' }}
         >
-          View deals
+          {t('common.viewDeals')}
         </Link>
       </div>
     </article>

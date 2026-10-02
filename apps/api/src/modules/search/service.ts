@@ -46,6 +46,29 @@ export type SearchParams = {
   pageSize?: number;
   locale?: string;
   currency?: string;
+  /**
+   * Unified discovery mode. `TYPE` (the default) additionally returns one
+   * bucket per category so the storefront can render category rails next to the
+   * flat, unified result list — the whole point of a cross-category search.
+   */
+  groupBy?: 'TYPE' | 'NONE';
+  /** Maximum hits returned inside each category bucket. */
+  groupLimit?: number;
+};
+
+/**
+ * One category bucket of a unified search response.
+ *
+ * `count` is the number of matching, *bookable* products in that category, and
+ * `items` is the top slice of them using the same ranking as the flat list.
+ * Together with `facets.types` this lets the client render a category tab bar
+ * and category rails without issuing one request per category.
+ */
+export type SearchGroup = {
+  type: ProductType;
+  label: string;
+  count: number;
+  items: SearchHit[];
 };
 
 export type SortOption =
@@ -63,6 +86,8 @@ export type SearchResult = {
   pageSize: number;
   totalPages: number;
   facets: Facets;
+  /** Per-category buckets for the unified discovery flow (empty when groupBy=NONE). */
+  groups: SearchGroup[];
   tookMs: number;
   engine: 'opensearch' | 'postgres';
 };
@@ -167,6 +192,47 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): nu
   return 2 * R * Math.asin(Math.sqrt(a));
 }
 
+/** Rows pulled from Postgres before availability/price resolution. */
+const CANDIDATE_LIMIT = 400;
+
+/** Ranking window shared by the flat list, the category buckets and the facets. */
+function candidateOrderBy(sort: SortOption | undefined): Prisma.SearchDocumentOrderByWithRelationInput | undefined {
+  if (sort === 'PRICE_ASC' || sort === 'PRICE_DESC') {
+    // Price is only known after availability resolution, so fall back to the
+    // popularity ordering here and do the real price sort in memory.
+    return { popularityScore: 'desc' };
+  }
+  if (sort === 'RATING') return { ratingAvg: 'desc' };
+  if (sort === 'POPULARITY' || sort === 'RELEVANCE') return { popularityScore: 'desc' };
+  return undefined;
+}
+
+/**
+ * Buckets ranked hits per category, preserving the global ranking inside each
+ * bucket (the input is already sorted). The largest categories come first: an
+ * "Attractions (18)" rail is more useful to a shopper than a "Cruises (1)" one.
+ */
+function buildGroups(hits: SearchHit[], params: SearchParams): SearchGroup[] {
+  if (params.groupBy === 'NONE') return [];
+  const limit = Math.min(24, Math.max(1, params.groupLimit ?? 8));
+
+  const buckets = new Map<ProductType, SearchHit[]>();
+  for (const hit of hits) {
+    const bucket = buckets.get(hit.type);
+    if (bucket) bucket.push(hit);
+    else buckets.set(hit.type, [hit]);
+  }
+
+  return [...buckets.entries()]
+    .sort((a, b) => b[1].length - a[1].length)
+    .map(([type, items]) => ({
+      type,
+      label: TYPE_LABELS[type] ?? type,
+      count: items.length,
+      items: items.slice(0, limit),
+    }));
+}
+
 /** Postgres backend: trigram-ish ILIKE + tsvector ranking. */
 async function searchPostgres(params: SearchParams): Promise<SearchResult> {
   const started = Date.now();
@@ -176,7 +242,12 @@ async function searchPostgres(params: SearchParams): Promise<SearchResult> {
   const requestedDates = params.serviceDates ?? (params.serviceDate ? [params.serviceDate] : undefined);
   const dates = requestedDates?.map((d) => toServiceDate(d)) ?? [];
 
-  const where: Prisma.SearchDocumentWhereInput = {
+  // `whereBase` deliberately excludes the category filter. The type counts are
+  // computed *before* the category narrowing is applied — the "disjunctive
+  // facet" behaviour Elasticsearch gets from `post_filter` plus global
+  // aggregations. Without it, selecting "Hotels" would report every other
+  // category as zero and the tab bar would collapse to one usable tab.
+  const whereBase: Prisma.SearchDocumentWhereInput = {
     status: ProductStatus.PUBLISHED,
   };
   const andFilters: Prisma.SearchDocumentWhereInput[] = [];
@@ -202,29 +273,25 @@ async function searchPostgres(params: SearchParams): Promise<SearchResult> {
     andFilters.push({ OR: destinationSlugs.map((slug) => ({ destinationPath: { has: slug } })) });
   }
 
-  if (params.type) where.type = params.type;
-  if (params.typeIn?.length) where.type = { in: params.typeIn };
-  if (params.minRating !== undefined) where.ratingAvg = { gte: params.minRating };
-  if (params.instantConfirmOnly) where.instantConfirm = true;
-  if (params.freeCancellationOnly) where.freeCancellation = true;
-  if (params.skipTheLineOnly) where.skipTheLine = true;
-  if (params.tags?.length) where.tags = { hasSome: params.tags.map((t) => t.toLowerCase()) };
+  if (params.minRating !== undefined) whereBase.ratingAvg = { gte: params.minRating };
+  if (params.instantConfirmOnly) whereBase.instantConfirm = true;
+  if (params.freeCancellationOnly) whereBase.freeCancellation = true;
+  if (params.skipTheLineOnly) whereBase.skipTheLine = true;
+  if (params.tags?.length) whereBase.tags = { hasSome: params.tags.map((t) => t.toLowerCase()) };
 
-  if (andFilters.length > 0) where.AND = andFilters;
+  if (andFilters.length > 0) whereBase.AND = andFilters;
+
+  // Filter the categories at the database level so a narrow category is never
+  // crowded out of the ranked window by a dominant one.
+  const typeFilter = params.typeIn?.length ? { in: params.typeIn } : params.type;
+  const where: Prisma.SearchDocumentWhereInput = typeFilter ? { ...whereBase, type: typeFilter } : whereBase;
 
   const total = await prisma.searchDocument.count({ where });
 
-  // Fetch a generous candidate window, then rank in memory after resolving
-  // real availability and price. This keeps price filters truthful.
   const candidates = await prisma.searchDocument.findMany({
     where,
-    take: 400,
-    orderBy:
-      params.sort === 'POPULARITY' || params.sort === 'RELEVANCE'
-        ? { popularityScore: 'desc' }
-        : params.sort === 'RATING'
-          ? { ratingAvg: 'desc' }
-          : undefined,
+    take: CANDIDATE_LIMIT,
+    orderBy: candidateOrderBy(params.sort),
   });
 
   const prices = await resolveAvailabilityAndPrice(
@@ -278,20 +345,35 @@ async function searchPostgres(params: SearchParams): Promise<SearchResult> {
 
   hits.sort(comparatorFor(params.sort));
 
+  // Category rails are only meaningful on the unified (unfiltered) view — once
+  // a single category is selected the flat list *is* the answer.
+  const groups = typeFilter ? [] : buildGroups(hits, params);
+
   const totalFiltered = hits.length;
   const paged = hits.slice((page - 1) * pageSize, page * pageSize);
 
-  // Hydrate presentation fields that the denormalised doc intentionally omits.
-  const hydrated = await hydrateHits(paged);
-  const facets = await buildFacets(hits);
+  // One hydration pass covers both the paginated slice and the category rails.
+  const hydrationNeeded = new Map<string, SearchHit>();
+  for (const hit of paged) hydrationNeeded.set(hit.productId, hit);
+  for (const group of groups) for (const hit of group.items) hydrationNeeded.set(hit.productId, hit);
+
+  const hydrated = new Map((await hydrateHits([...hydrationNeeded.values()])).map((hit) => [hit.productId, hit]));
+  const items = paged.map((hit) => hydrated.get(hit.productId) ?? hit);
+  const hydratedGroups = groups.map((group) => ({
+    ...group,
+    items: group.items.map((hit) => hydrated.get(hit.productId) ?? hit),
+  }));
+
+  const facets = await buildFacets(hits, typeFilter ? whereBase : undefined);
 
   return {
-    items: hydrated,
+    items,
     total: Math.min(total, totalFiltered),
     page,
     pageSize,
     totalPages: Math.ceil(totalFiltered / pageSize),
     facets,
+    groups: hydratedGroups,
     tookMs: Date.now() - started,
     engine: 'postgres',
   };
@@ -348,8 +430,28 @@ async function hydrateHits(hits: SearchHit[]): Promise<SearchHit[]> {
   });
 }
 
-async function buildFacets(hits: SearchHit[]): Promise<Facets> {
+/**
+ * Computes the facet block for a result set.
+ *
+ * `disjunctiveWhere` is supplied when a category filter is active: the category
+ * counts then come from a database aggregate over the filter set *excluding*
+ * the category narrowing, so the tab bar stays fully populated (and the shopper
+ * can widen the search) instead of collapsing to the one selected tab.
+ */
+async function buildFacets(hits: SearchHit[], disjunctiveWhere?: Prisma.SearchDocumentWhereInput): Promise<Facets> {
   const facets = emptyFacets();
+
+  if (disjunctiveWhere) {
+    const rows = await prisma.searchDocument.groupBy({
+      by: ['type'],
+      where: disjunctiveWhere,
+      _count: { _all: true },
+    });
+    facets.types = rows
+      .map((row) => ({ value: row.type, label: TYPE_LABELS[row.type] ?? row.type, count: row._count._all }))
+      .sort((a, b) => b.count - a.count);
+  }
+
   if (hits.length === 0) return facets;
 
   const typeCounts = new Map<string, number>();
@@ -367,9 +469,12 @@ async function buildFacets(hits: SearchHit[]): Promise<Facets> {
   }
 
   facets.priceRange = { minCents: Number.isFinite(min) ? min : 0, maxCents: max };
-  facets.types = [...typeCounts.entries()]
-    .map(([value, count]) => ({ value, label: TYPE_LABELS[value] ?? value, count }))
-    .sort((a, b) => b.count - a.count);
+
+  if (!disjunctiveWhere) {
+    facets.types = [...typeCounts.entries()]
+      .map(([value, count]) => ({ value, label: TYPE_LABELS[value] ?? value, count }))
+      .sort((a, b) => b.count - a.count);
+  }
 
   facets.destinations = [...destinationCounts.entries()]
     .map(([value, count]) => ({ value, label: value, count }))
@@ -411,7 +516,12 @@ async function searchOpenSearch(params: SearchParams): Promise<SearchResult> {
   const pageSize = Math.min(60, Math.max(1, params.pageSize ?? 24));
 
   const must: unknown[] = [];
-  const filter: unknown[] = [{ term: { status: 'PUBLISHED' } }];
+  // Two filter sets: the full one used for hits, and `facetFilter`, which omits
+  // the category narrowing so the category aggregation stays "disjunctive" —
+  // picking "Hotels" must not zero out every other tab. This is the OpenSearch
+  // equivalent of Elasticsearch's post_filter + global aggregation pattern.
+  const facetFilter: unknown[] = [{ term: { status: 'PUBLISHED' } }];
+  const typeClauses: unknown[] = [];
 
   if (params.query) {
     must.push({
@@ -425,15 +535,17 @@ async function searchOpenSearch(params: SearchParams): Promise<SearchResult> {
   }
 
   const slugs = params.destinationSlugIn ?? (params.destinationSlug ? [params.destinationSlug] : []);
-  if (slugs.length) filter.push({ terms: { destinationPath: slugs } });
-  if (params.type) filter.push({ term: { type: params.type } });
-  if (params.typeIn?.length) filter.push({ terms: { type: params.typeIn } });
-  if (params.minRating) filter.push({ range: { ratingAvg: { gte: params.minRating } } });
-  if (params.instantConfirmOnly) filter.push({ term: { instantConfirm: true } });
-  if (params.freeCancellationOnly) filter.push({ term: { freeCancellation: true } });
-  if (params.skipTheLineOnly) filter.push({ term: { skipTheLine: true } });
-  if (params.minPriceCents !== undefined) filter.push({ range: { basePriceCents: { gte: params.minPriceCents } } });
-  if (params.maxPriceCents !== undefined) filter.push({ range: { basePriceCents: { lte: params.maxPriceCents } } });
+  if (slugs.length) facetFilter.push({ terms: { destinationPath: slugs } });
+  if (params.type) typeClauses.push({ term: { type: params.type } });
+  if (params.typeIn?.length) typeClauses.push({ terms: { type: params.typeIn } });
+  if (params.minRating) facetFilter.push({ range: { ratingAvg: { gte: params.minRating } } });
+  if (params.instantConfirmOnly) facetFilter.push({ term: { instantConfirm: true } });
+  if (params.freeCancellationOnly) facetFilter.push({ term: { freeCancellation: true } });
+  if (params.skipTheLineOnly) facetFilter.push({ term: { skipTheLine: true } });
+  if (params.minPriceCents !== undefined) facetFilter.push({ range: { basePriceCents: { gte: params.minPriceCents } } });
+  if (params.maxPriceCents !== undefined) facetFilter.push({ range: { basePriceCents: { lte: params.maxPriceCents } } });
+
+  const filter: unknown[] = [...facetFilter, ...typeClauses];
 
   const sortClause: unknown[] = [];
   switch (params.sort) {
@@ -476,7 +588,11 @@ async function searchOpenSearch(params: SearchParams): Promise<SearchResult> {
     query: { bool: { must: must.length ? must : [{ match_all: {} }], filter } },
     sort: sortClause,
     aggs: {
-      types: { terms: { field: 'type.keyword', size: 20 } },
+      // Category counts over the pre-category filter set (see `facetFilter`).
+      types: {
+        filter: { bool: { filter: facetFilter } },
+        aggs: { by_type: { terms: { field: 'type.keyword', size: 20 } } },
+      },
       cities: { terms: { field: 'cityName.keyword', size: 20 } },
       tags: { terms: { field: 'tags.keyword', size: 20 } },
       price: { stats: { field: 'basePriceCents' } },
@@ -495,9 +611,14 @@ async function searchOpenSearch(params: SearchParams): Promise<SearchResult> {
     });
 
     if (!response.ok) throw new Error(`OpenSearch responded ${response.status}`);
+    type Aggregation = {
+      buckets?: { key: string; doc_count: number }[];
+      value?: number;
+      by_type?: { buckets?: { key: string; doc_count: number }[] };
+    };
     const data = (await response.json()) as {
       hits: { total: { value: number }; hits: Record<string, unknown>[] };
-      aggregations: Record<string, { buckets?: { key: string; doc_count: number }[]; value?: number }>;
+      aggregations: Record<string, Aggregation>;
     };
 
     const requestedDates = params.serviceDates ?? (params.serviceDate ? [params.serviceDate] : undefined);
@@ -547,14 +668,17 @@ async function searchOpenSearch(params: SearchParams): Promise<SearchResult> {
         };
       });
 
+    const hydratedItems = await hydrateHits(items);
+    const categoryFiltered = Boolean(params.type || params.typeIn?.length);
+
     return {
-      items: await hydrateHits(items),
+      items: hydratedItems,
       total: data.hits.total.value,
       page,
       pageSize,
       totalPages: Math.ceil(data.hits.total.value / pageSize),
       facets: {
-        types: (data.aggregations.types?.buckets ?? []).map((b) => ({ value: b.key, label: TYPE_LABELS[b.key] ?? b.key, count: b.doc_count })),
+        types: (data.aggregations.types?.by_type?.buckets ?? []).map((b) => ({ value: b.key, label: TYPE_LABELS[b.key] ?? b.key, count: b.doc_count })),
         destinations: (data.aggregations.cities?.buckets ?? []).map((b) => ({ value: b.key, label: b.key, count: b.doc_count })),
         tags: (data.aggregations.tags?.buckets ?? []).map((b) => ({ value: b.key, label: b.key, count: b.doc_count })),
         priceRange: {
@@ -563,6 +687,9 @@ async function searchOpenSearch(params: SearchParams): Promise<SearchResult> {
         },
         ratings: (data.aggregations.ratings?.buckets ?? []).map((b) => ({ value: Number(b.key), count: b.doc_count })),
       },
+      // Category rails only make sense on the unified view; once a category is
+      // selected the flat list is the answer.
+      groups: categoryFiltered ? [] : buildGroups(hydratedItems, params),
       tookMs: Date.now() - started,
       engine: 'opensearch',
     };

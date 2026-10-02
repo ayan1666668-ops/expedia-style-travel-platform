@@ -4,13 +4,19 @@ import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import type { AvailabilityDay } from '@/lib/api';
 import { formatMoney } from '@/lib/format';
+import type { LocaleCode } from '@/lib/i18n/config';
+import { createTranslator } from '@/lib/i18n/dictionaries';
 
-const WEEKDAYS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
+/** Intl tag for each UI locale — used for month and weekday names. */
+const INTL_LOCALE: Record<LocaleCode, string> = { en: 'en-US', zh: 'zh-CN' };
+
+const WEEK_START_ISO = '2024-01-01'; // a Monday, so index 0 is always Monday
 
 type Props = {
   slug: string;
   days: AvailabilityDay[];
   selected: string;
+  locale: LocaleCode;
 };
 
 /**
@@ -20,9 +26,24 @@ type Props = {
  * grid renders the whole month but disables anything without availability —
  * which matches how travellers read a hotel or tour calendar.
  */
-export function AvailabilityCalendar({ slug, days, selected }: Props) {
+export function AvailabilityCalendar({ slug, days, selected, locale }: Props) {
   const router = useRouter();
+  const t = createTranslator(locale);
   const [monthOffset, setMonthOffset] = useState(0);
+
+  // Weekday headers come from Intl rather than a hard-coded array so the
+  // calendar reads correctly in both locales without a translation entry per
+  // day name.
+  const weekdays = useMemo(() => {
+    const formatter = new Intl.DateTimeFormat(INTL_LOCALE[locale], {
+      weekday: 'short',
+      timeZone: 'UTC',
+    });
+    const start = Date.parse(`${WEEK_START_ISO}T00:00:00Z`);
+    return Array.from({ length: 7 }, (_, index) =>
+      formatter.format(new Date(start + index * 86_400_000)),
+    );
+  }, [locale]);
 
   const availabilityByDate = useMemo(() => {
     const map = new Map<string, AvailabilityDay>();
@@ -48,10 +69,14 @@ export function AvailabilityCalendar({ slug, days, selected }: Props) {
     }
 
     return {
-      monthLabel: new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(anchor),
+      monthLabel: new Intl.DateTimeFormat(INTL_LOCALE[locale], {
+        month: 'long',
+        year: 'numeric',
+        timeZone: 'UTC',
+      }).format(anchor),
       cells: list,
     };
-  }, [days, monthOffset]);
+  }, [days, monthOffset, locale]);
 
   const todayIso = new Date().toISOString().slice(0, 10);
 
@@ -71,7 +96,7 @@ export function AvailabilityCalendar({ slug, days, selected }: Props) {
           className="btn btn-ghost btn-sm"
           onClick={() => setMonthOffset((v) => Math.max(0, v - 1))}
           disabled={!canGoBack}
-          aria-label="Previous month"
+          aria-label={t('product.prevMonth')}
         >
           ←
         </button>
@@ -81,7 +106,7 @@ export function AvailabilityCalendar({ slug, days, selected }: Props) {
           className="btn btn-ghost btn-sm"
           onClick={() => setMonthOffset((v) => v + 1)}
           disabled={!canGoForward}
-          aria-label="Next month"
+          aria-label={t('product.nextMonth')}
         >
           →
         </button>
@@ -89,12 +114,12 @@ export function AvailabilityCalendar({ slug, days, selected }: Props) {
 
       {!monthHasAny ? (
         <p className="small muted center" style={{ padding: 'var(--sp-5)' }}>
-          No availability published for this month.
+          {t('product.noAvailabilityMonth')}
         </p>
       ) : (
         <>
           <div className="calendar-grid">
-            {WEEKDAYS.map((day) => (
+            {weekdays.map((day) => (
               <div key={day} className="calendar-head">
                 {day}
               </div>
