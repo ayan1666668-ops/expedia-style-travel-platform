@@ -5,6 +5,7 @@ import { ProductCard } from '@/components/ProductCard';
 import { PromoStrip } from '@/components/PromoStrip';
 import { resolveServerLocale } from '@/lib/i18n/config';
 import { createTranslator } from '@/lib/i18n/dictionaries';
+import { brandName, brandTagline } from '@/lib/brand';
 import type { LocaleCode } from '@/lib/i18n/config';
 
 // Destination rails and curated collections change slowly; revalidate hourly.
@@ -20,10 +21,10 @@ export default async function HomePage() {
   // Every rail is independent: one failing call must not blank the page.
   const [destinations, trending, freeCancel, skipLine, topRated] = await Promise.all([
     api.destinations().catch(() => []),
-    api.collection('trending').catch(() => null),
-    api.collection('free-cancellation').catch(() => null),
-    api.collection('skip-the-line').catch(() => null),
-    api.collection('top-rated').catch(() => null),
+    api.collection('trending', null, locale).catch(() => null),
+    api.collection('free-cancellation', null, locale).catch(() => null),
+    api.collection('skip-the-line', null, locale).catch(() => null),
+    api.collection('top-rated', null, locale).catch(() => null),
   ]);
 
   return (
@@ -32,23 +33,32 @@ export default async function HomePage() {
       {/* Hero + search                                                  */}
       {/* ---------------------------------------------------------------- */}
       <section
+        className="hero-premium"
         style={{
-          background: 'linear-gradient(135deg, var(--brand-800) 0%, var(--brand-600) 55%, var(--brand-500) 100%)',
+          background: 'linear-gradient(135deg, var(--brand-900) 0%, var(--brand-700) 48%, var(--brand-500) 100%)',
           color: '#fff',
-          padding: 'var(--sp-7) 0 var(--sp-8)',
+          padding: 'var(--sp-8) 0 var(--sp-8)',
         }}
       >
         <div className="container">
-          <div className="stack" style={{ maxWidth: 720 }}>
-            <h1 style={{ fontSize: 38, letterSpacing: '-0.03em' }}>{t('home.heroTitle')}</h1>
-            <p style={{ fontSize: 17, opacity: 0.9, maxWidth: 560 }}>{t('home.heroSubtitle')}</p>
+          <div className="stack" style={{ maxWidth: 760 }}>
+            {/* The brand promise line sits above the headline so the first thing
+                a visitor reads is who this is, not what it sells. */}
+            <p className="hero-kicker">
+              <span className="hero-kicker-mark" aria-hidden>
+                {brandName(locale)}
+              </span>
+              <span>{brandTagline(locale)}</span>
+            </p>
+            <h1 className="hero-title">{t('home.heroTitle')}</h1>
+            <p className="hero-subtitle">{t('home.heroSubtitle')}</p>
           </div>
 
           <SearchBox locale={locale} />
 
-          <div className="row wrap" style={{ gap: 'var(--sp-4)', marginTop: 'var(--sp-5)' }}>
+          <div className="row wrap" style={{ gap: 'var(--sp-5)', marginTop: 'var(--sp-6)' }}>
             {TRUST_POINTS.map((key) => (
-              <span key={key} className="small" style={{ opacity: 0.9, display: 'inline-flex', gap: 6 }}>
+              <span key={key} className="hero-trust">
                 <span aria-hidden>✓</span>
                 {t(key)}
               </span>
@@ -85,34 +95,18 @@ export default async function HomePage() {
                 <Link
                   key={destination.slug}
                   href={`/search?destination=${destination.slug}`}
-                  className="card card-hover"
-                  style={{ color: 'inherit' }}
+                  className="destination-tile"
                 >
-                  <div style={{ position: 'relative', height: 132 }}>
+                  <div className="destination-media">
                     {destination.heroImageUrl ? (
-                      <img
-                        src={destination.heroImageUrl}
-                        alt=""
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                        loading="lazy"
-                      />
+                      <img src={destination.heroImageUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} loading="lazy" />
                     ) : (
                       <div className="skeleton" style={{ width: '100%', height: '100%' }} />
                     )}
-                    <div
-                      style={{
-                        position: 'absolute',
-                        inset: 0,
-                        background: 'linear-gradient(to top, rgba(0,0,0,0.65), transparent 60%)',
-                      }}
-                    />
-                    <div style={{ position: 'absolute', bottom: 10, left: 12, color: '#fff' }}>
-                      <div className="bold" style={{ fontSize: 16 }}>
-                        {destination.name}
-                      </div>
-                      <div className="tiny" style={{ opacity: 0.85 }}>
-                        {t('home.experiencesCount', destination.productCount)}
-                      </div>
+                    <div className="destination-scrim" />
+                    <div className="destination-caption">
+                      <div className="destination-name">{destination.name}</div>
+                      <div className="destination-count">{t('home.experiencesCount', destination.productCount)}</div>
                     </div>
                   </div>
                 </Link>
@@ -178,12 +172,8 @@ export default async function HomePage() {
         {/* -------------------------------------------------------------- */}
         <section style={{ padding: 'var(--sp-7) 0' }}>
           <div
-            className="card card-pad"
-            style={{
-              background: 'linear-gradient(135deg, var(--brand-50), var(--surface))',
-              borderColor: 'var(--brand-100)',
-              padding: 'var(--sp-6)',
-            }}
+            className="card card-pad loyalty-panel"
+            style={{ padding: 'var(--sp-6)' }}
           >
             <div className="row-between wrap" style={{ gap: 'var(--sp-5)' }}>
               <div className="stack-sm" style={{ maxWidth: 480 }}>
@@ -214,33 +204,37 @@ function SearchBox({ locale }: { locale: LocaleCode }) {
       className="card hero-search"
     >
       <div className="hero-field">
-        <label htmlFor="q" className="tiny subtle bold" style={{ display: 'block', marginBottom: 2 }}>
+        <label htmlFor="q" className="hero-label">
           {t('home.whatToDo')}
         </label>
         <input
           id="q"
           name="q"
           className="input"
-          placeholder="Louvre, bike tour, flamenco, river cruise…"
+          placeholder={
+            locale === 'zh'
+              ? '国际机票、五星酒店、邮轮、私人向导…'
+              : 'International flights, five-star hotels, cruises, private guides…'
+          }
           style={{ border: 'none', padding: '4px 0', fontSize: 16 }}
         />
       </div>
 
       <div className="hero-field">
-        <label htmlFor="destination" className="tiny subtle bold" style={{ display: 'block', marginBottom: 2 }}>
+        <label htmlFor="destination" className="hero-label">
           {t('home.where')}
         </label>
         <input
           id="destination"
           name="destination"
           className="input"
-          placeholder={locale === 'zh' ? '城市或目的地' : 'City or destination'}
+          placeholder={locale === 'zh' ? '城市或国家' : 'City or country'}
           style={{ border: 'none', padding: '4px 0', fontSize: 16 }}
         />
       </div>
 
       <div className="hero-field">
-        <label htmlFor="date" className="tiny subtle bold" style={{ display: 'block', marginBottom: 2 }}>
+        <label htmlFor="date" className="hero-label">
           {t('home.when')}
         </label>
         <input

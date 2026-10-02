@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ---------------------------------------------------------------------------
-# Voyahub end-to-end smoke test
+# EasyTrip end-to-end smoke test
 #
 # Exercises the full commercial loop against a running API:
 #   search -> product detail -> checkout -> payment -> ticket issue
@@ -143,7 +143,7 @@ CAL_DAYS=$(echo "$CAL" | jget '.days' | node -e "let d='';process.stdin.on('data
 check "availability calendar returns days (${CAL_DAYS:-0})" "$([ "${CAL_DAYS:-0}" -gt 0 ] && echo true || echo false)"
 
 head2 "Auth"
-EMAIL="smoke+$(date +%s)@voyahub.test"
+EMAIL="smoke+$(date +%s)@easytrip.test"
 REG=$(curl -fsS -X POST "$API/api/v1/auth/register" \
   -H 'Content-Type: application/json' \
   -d "{\"email\":\"$EMAIL\",\"password\":\"Password123!\",\"firstName\":\"Smoke\",\"lastName\":\"Test\"}")
@@ -232,7 +232,7 @@ check "a declined card returns FAILED" "$(echo "$DECLINE_PAY" | jget '.status' |
 head2 "Gate redemption"
 STAFF=$(curl -fsS -X POST "$API/api/v1/auth/login" \
   -H 'Content-Type: application/json' \
-  -d '{"email":"operator@voyahub.test","password":"Password123!"}')
+  -d '{"email":"operator@easytrip.test","password":"Password123!"}')
 STAFF_TOKEN=$(echo "$STAFF" | jget '.token')
 check "operator can log in" "$([ -n "$STAFF_TOKEN" ] && [ "$STAFF_TOKEN" != "null" ] && echo true || echo false)"
 
@@ -291,7 +291,7 @@ check "notifications reject anonymous access (401)" "$([ "$ANON_NOTIFS" = "401" 
 head2 "Admin"
 ADMIN=$(curl -fsS -X POST "$API/api/v1/auth/login" \
   -H 'Content-Type: application/json' \
-  -d '{"email":"admin@voyahub.test","password":"Password123!"}')
+  -d '{"email":"admin@easytrip.test","password":"Password123!"}')
 ADMIN_TOKEN=$(echo "$ADMIN" | jget '.token')
 
 DASH=$(curl -fsS "$API/api/v1/admin/dashboard" -H "Authorization: Bearer $ADMIN_TOKEN")

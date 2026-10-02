@@ -109,7 +109,7 @@ export async function socialRoutes(app: FastifyInstance): Promise<void> {
               avatarUrl: review.user.avatarUrl,
               countryCode: review.user.countryCode,
             }
-          : { name: 'Voyahub traveler', avatarUrl: null, countryCode: null },
+          : { name: 'EasyTrip guest', avatarUrl: null, countryCode: null },
         media: review.media.map((m) => m.url),
       })),
       total,

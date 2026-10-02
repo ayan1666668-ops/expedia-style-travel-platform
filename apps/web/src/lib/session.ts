@@ -8,8 +8,8 @@
  * could show anything.
  */
 
-const TOKEN_KEY = 'voyahub_token';
-const USER_KEY = 'voyahub_user';
+const TOKEN_KEY = 'easytrip_token';
+const USER_KEY = 'easytrip_user';
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 30; // 30 days, matches a typical refresh window
 
 type SessionListener = () => void;

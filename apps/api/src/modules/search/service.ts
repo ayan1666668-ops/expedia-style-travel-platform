@@ -116,6 +116,34 @@ export type SearchHit = {
   nextAvailableDate: string | null;
   badge: string | null;
   tags: string[];
+
+  /**
+   * Category-specific display fields, mirrored from `Product`.
+   *
+   * The storefront renders a different card per category — a flight shows the
+   * route and cabin, a hotel the star rating and board basis, a cruise the ship
+   * and duration. Shipping them on the hit means the card never has to guess or
+   * issue a second request per product.
+   *
+   * All optional: absent for categories that do not use them.
+   */
+  category?: ProductCategoryInfo;
+};
+
+/** The subset of `Product` fields that are specific to one product type. */
+export type ProductCategoryInfo = {
+  airlineName: string | null;
+  flightRoute: string | null;
+  cabinClass: string | null;
+  roomCategory: string | null;
+  starCategory: number | null;
+  boardBasis: string | null;
+  cruiseLine: string | null;
+  shipName: string | null;
+  cruiseNights: number | null;
+  itineraryPorts: string[];
+  groupSizeCap: number | null;
+  privateDeparture: boolean;
 };
 
 export type Facets = {
@@ -227,7 +255,7 @@ function buildGroups(hits: SearchHit[], params: SearchParams): SearchGroup[] {
     .sort((a, b) => b[1].length - a[1].length)
     .map(([type, items]) => ({
       type,
-      label: TYPE_LABELS[type] ?? type,
+      label: typeLabel(type, params.locale),
       count: items.length,
       items: items.slice(0, limit),
     }));
@@ -357,14 +385,14 @@ async function searchPostgres(params: SearchParams): Promise<SearchResult> {
   for (const hit of paged) hydrationNeeded.set(hit.productId, hit);
   for (const group of groups) for (const hit of group.items) hydrationNeeded.set(hit.productId, hit);
 
-  const hydrated = new Map((await hydrateHits([...hydrationNeeded.values()])).map((hit) => [hit.productId, hit]));
+  const hydrated = new Map((await hydrateHits([...hydrationNeeded.values()], params.locale)).map((hit) => [hit.productId, hit]));
   const items = paged.map((hit) => hydrated.get(hit.productId) ?? hit);
   const hydratedGroups = groups.map((group) => ({
     ...group,
     items: group.items.map((hit) => hydrated.get(hit.productId) ?? hit),
   }));
 
-  const facets = await buildFacets(hits, typeFilter ? whereBase : undefined);
+  const facets = await buildFacets(hits, typeFilter ? whereBase : undefined, params.locale);
 
   return {
     items,
@@ -396,38 +424,80 @@ function comparatorFor(sort: SortOption | undefined): (a: SearchHit, b: SearchHi
   }
 }
 
-async function hydrateHits(hits: SearchHit[]): Promise<SearchHit[]> {
+/**
+ * Fills in the fields the search projection does not denormalise: the display
+ * title in the requested language, the hero image, tags, and the
+ * category-specific block the storefront card renders.
+ *
+ * The locale matters here: every listing ships an English *and* a Chinese
+ * translation, and `translations: { take: 1 }` would return whichever row
+ * Postgres happened to order first — usually the English one, so a Chinese
+ * shopper would see English titles in the results. The translations are
+ * therefore fetched explicitly and matched on the locale subtag.
+ */
+async function hydrateHits(hits: SearchHit[], locale = 'en'): Promise<SearchHit[]> {
   if (hits.length === 0) return hits;
 
   const products = await prisma.product.findMany({
     where: { id: { in: hits.map((h) => h.productId) } },
     include: {
       media: { orderBy: { position: 'asc' }, take: 1 },
-      translations: { take: 1 },
+      translations: true,
       tags: true,
     },
   });
   const byId = new Map(products.map((p) => [p.id, p]));
 
+  /** Picks the translation for `locale`, falling back to English, then any. */
+  const pickTranslation = (translations: typeof products[number]['translations']) =>
+    translations.find((t) => t.locale.toLowerCase().startsWith(locale.split('-')[0]!.toLowerCase())) ??
+    translations.find((t) => t.locale.toLowerCase().startsWith('en')) ??
+    translations[0];
+
   return hits.map((hit) => {
     const product = byId.get(hit.productId);
     if (!product) return hit;
 
-    const discount =
-      hit.compareAtPriceCents !== null && hit.compareAtPriceCents > hit.priceCents
-        ? Math.round(((hit.compareAtPriceCents - hit.priceCents) / hit.compareAtPriceCents) * 100)
-        : null;
+    const translation = pickTranslation(product.translations);
 
     return {
       ...hit,
       slug: product.slug,
-      title: product.translations[0]?.name ?? product.slug,
-      summary: product.translations[0]?.summary ?? hit.summary,
+      title: translation?.name ?? product.slug,
+      summary: translation?.summary ?? hit.summary,
       imageUrl: product.media[0]?.url ?? null,
-      badge: discount && discount >= 20 ? `${discount}% OFF` : product.skipTheLine ? 'Skip the line' : product.instantConfirm ? 'Instant confirmation' : null,
+      // Positive, trust-building badge only. A discount percentage is
+      // deliberately not used here: the storefront reads as a premium
+      // consultancy, not a bargain bin.
+      badge: badgeFor(hit.type, product),
       tags: product.tags.map((t) => t.slug),
+      category: {
+        airlineName: product.airlineName,
+        flightRoute: product.flightRoute,
+        cabinClass: product.cabinClass,
+        roomCategory: product.roomCategory,
+        starCategory: product.starCategory,
+        boardBasis: product.boardBasis,
+        cruiseLine: product.cruiseLine,
+        shipName: product.shipName,
+        cruiseNights: product.cruiseNights,
+        itineraryPorts: product.itineraryPorts,
+        groupSizeCap: product.groupSizeCap,
+        privateDeparture: product.privateDeparture,
+      },
     };
   });
+}
+
+/**
+ * The small ribbon on a card. Ranked from most to least differentiating so a
+ * product always gets the strongest honest signal it has.
+ */
+function badgeFor(type: string, product: { skipTheLine: boolean; instantConfirm: boolean; privateDeparture: boolean }): string | null {
+  if (product.skipTheLine) return 'Priority entry';
+  if (product.privateDeparture) return 'Private departure';
+  if (product.instantConfirm) return 'Instant confirmation';
+  return null;
 }
 
 /**
@@ -438,7 +508,7 @@ async function hydrateHits(hits: SearchHit[]): Promise<SearchHit[]> {
  * the category narrowing, so the tab bar stays fully populated (and the shopper
  * can widen the search) instead of collapsing to the one selected tab.
  */
-async function buildFacets(hits: SearchHit[], disjunctiveWhere?: Prisma.SearchDocumentWhereInput): Promise<Facets> {
+async function buildFacets(hits: SearchHit[], disjunctiveWhere?: Prisma.SearchDocumentWhereInput, locale = 'en'): Promise<Facets> {
   const facets = emptyFacets();
 
   if (disjunctiveWhere) {
@@ -448,7 +518,7 @@ async function buildFacets(hits: SearchHit[], disjunctiveWhere?: Prisma.SearchDo
       _count: { _all: true },
     });
     facets.types = rows
-      .map((row) => ({ value: row.type, label: TYPE_LABELS[row.type] ?? row.type, count: row._count._all }))
+      .map((row) => ({ value: row.type, label: typeLabel(row.type, locale), count: row._count._all }))
       .sort((a, b) => b.count - a.count);
   }
 
@@ -472,7 +542,7 @@ async function buildFacets(hits: SearchHit[], disjunctiveWhere?: Prisma.SearchDo
 
   if (!disjunctiveWhere) {
     facets.types = [...typeCounts.entries()]
-      .map(([value, count]) => ({ value, label: TYPE_LABELS[value] ?? value, count }))
+      .map(([value, count]) => ({ value, label: typeLabel(value, locale), count }))
       .sort((a, b) => b.count - a.count);
   }
 
@@ -495,19 +565,51 @@ async function buildFacets(hits: SearchHit[], disjunctiveWhere?: Prisma.SearchDo
 }
 
 export const TYPE_LABELS: Record<string, string> = {
-  ATTRACTION_TICKET: 'Attraction tickets',
-  ACTIVITY: 'Activities',
+  ATTRACTION_TICKET: 'Landmark access',
+  ACTIVITY: 'Signature activities',
   TOUR: 'Tours',
   DAY_TRIP: 'Day trips',
-  PACKAGE: 'Packages',
-  HOTEL_ROOM: 'Hotels',
+  PACKAGE: 'Curated packages',
+  HOTEL_ROOM: 'Hotels & suites',
   TRANSFER: 'Transfers',
-  VEHICLE_RENTAL: 'Car rental',
-  GUIDED_TOUR: 'Guided tours',
-  RESTAURANT: 'Restaurants',
-  CRUISE: 'Cruises',
-  RENTAL_CAR: 'Car rental',
+  VEHICLE_RENTAL: 'Car hire',
+  GUIDED_TOUR: 'Private guides',
+  RESTAURANT: 'Dining',
+  CRUISE: 'Ocean & river cruises',
+  RENTAL_CAR: 'Car hire',
+  FLIGHT: 'International flights',
+  AIRPORT_TRANSFER: 'Airport transfers',
 };
+
+/**
+ * Simplified Chinese category labels, parallel to {@link TYPE_LABELS}.
+ *
+ * The storefront asks for the localized label via `searchDocuments.locale`
+ * (`zh` → `zh-CN`), so the rails and facet counts read naturally in Chinese
+ * instead of showing an English enum label.
+ */
+export const TYPE_LABELS_ZH: Record<string, string> = {
+  ATTRACTION_TICKET: '殿堂级景点',
+  ACTIVITY: '特色活动',
+  TOUR: '深度旅行团',
+  DAY_TRIP: '一日游',
+  PACKAGE: '臻选套餐',
+  HOTEL_ROOM: '豪华酒店',
+  TRANSFER: '接送服务',
+  VEHICLE_RENTAL: '租车服务',
+  GUIDED_TOUR: '私人向导',
+  RESTAURANT: '餐饮订位',
+  CRUISE: '邮轮与河轮',
+  RENTAL_CAR: '租车服务',
+  FLIGHT: '国际机票',
+  AIRPORT_TRANSFER: '机场接送',
+};
+
+/** Picks the label set for an API locale (`zh-CN`, `en-US`, ...). */
+export function typeLabel(type: string, locale = 'en'): string {
+  const table = String(locale).toLowerCase().startsWith('zh') ? TYPE_LABELS_ZH : TYPE_LABELS;
+  return table[type] ?? TYPE_LABELS[type] ?? type;
+}
 
 /** OpenSearch backend. Falls back to Postgres on any failure. */
 async function searchOpenSearch(params: SearchParams): Promise<SearchResult> {
@@ -668,7 +770,7 @@ async function searchOpenSearch(params: SearchParams): Promise<SearchResult> {
         };
       });
 
-    const hydratedItems = await hydrateHits(items);
+    const hydratedItems = await hydrateHits(items, params.locale);
     const categoryFiltered = Boolean(params.type || params.typeIn?.length);
 
     return {
@@ -678,7 +780,7 @@ async function searchOpenSearch(params: SearchParams): Promise<SearchResult> {
       pageSize,
       totalPages: Math.ceil(data.hits.total.value / pageSize),
       facets: {
-        types: (data.aggregations.types?.by_type?.buckets ?? []).map((b) => ({ value: b.key, label: TYPE_LABELS[b.key] ?? b.key, count: b.doc_count })),
+        types: (data.aggregations.types?.by_type?.buckets ?? []).map((b) => ({ value: b.key, label: typeLabel(b.key, params.locale), count: b.doc_count })),
         destinations: (data.aggregations.cities?.buckets ?? []).map((b) => ({ value: b.key, label: b.key, count: b.doc_count })),
         tags: (data.aggregations.tags?.buckets ?? []).map((b) => ({ value: b.key, label: b.key, count: b.doc_count })),
         priceRange: {
@@ -729,15 +831,29 @@ export async function indexProduct(productId: string): Promise<void> {
   }
 
   const defaultTranslation = product.translations.find((t) => t.locale === product.defaultLocale) ?? product.translations[0];
+
+  // Every locale's copy goes into `body` and `keywords`, not just the default.
+  // The Postgres matcher scans `body`/`title`/`keywords`, so a Chinese shopper
+  // searching 「私人向导」 must hit a product whose only English word is
+  // "guide" — that only works if the translated names, summaries and
+  // highlights are indexed alongside the English ones.
+  const localizedCopy = product.translations.flatMap((t) => [
+    t.name,
+    t.summary ?? '',
+    ...(t.highlights ?? []),
+    ...(t.includes ?? []),
+  ]);
+
   const body = [
-    defaultTranslation?.name,
-    defaultTranslation?.summary,
-    defaultTranslation?.description,
-    ...product.translations.map((t) => t.name),
-    ...(defaultTranslation?.highlights ?? []),
-    ...(defaultTranslation?.includes ?? []),
-    product.addressLine,
-    product.meetingPoint,
+    ...localizedCopy,
+    defaultTranslation?.description ?? '',
+    product.addressLine ?? '',
+    product.meetingPoint ?? '',
+    product.airlineName ?? '',
+    product.cruiseLine ?? '',
+    product.shipName ?? '',
+    product.roomCategory ?? '',
+    product.cabinClass ?? '',
     ...product.reviews.map((r) => `${r.title ?? ''} ${r.body}`),
   ]
     .filter(Boolean)
@@ -757,7 +873,9 @@ export async function indexProduct(productId: string): Promise<void> {
     titleAll: product.translations.map((t) => t.name),
     summary: defaultTranslation?.summary ?? null,
     body,
-    keywords: [...product.tags.map((t) => t.label), ...(defaultTranslation?.highlights ?? [])].map((k) => k.toLowerCase()),
+    keywords: [...product.tags.map((t) => t.label), ...localizedCopy]
+      .filter(Boolean)
+      .map((k) => String(k).toLowerCase()),
     tags: product.tags.map((t) => t.slug),
     destinationPath,
     countryCode: product.destination?.countryCode ?? null,

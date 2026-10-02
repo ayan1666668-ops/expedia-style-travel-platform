@@ -77,7 +77,7 @@ export function PromoManager({ locale }: { locale: LocaleCode }) {
   }
 
   useEffect(() => {
-    const stored = window.localStorage.getItem('voyahub_token');
+    const stored = window.localStorage.getItem('easytrip_token');
     if (!stored) return;
     setToken(stored);
     load(stored);

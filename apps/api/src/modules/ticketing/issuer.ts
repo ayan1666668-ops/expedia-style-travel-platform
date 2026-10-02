@@ -106,7 +106,7 @@ export function buildQrPayload(input: {
     s: input.timeSlot ?? null,
     sig: input.signature,
   };
-  return `VOYAHUB1.${Buffer.from(JSON.stringify(compact)).toString('base64url')}`;
+  return `EASYTRIP1.${Buffer.from(JSON.stringify(compact)).toString('base64url')}`;
 }
 
 export async function generateTicketArtifacts(input: TicketArtifactInput): Promise<TicketArtifact> {
@@ -139,7 +139,7 @@ async function buildTicketPdf(input: TicketArtifactInput, qrDataUrl: string): Pr
   const { width, height } = page.getSize();
 
   page.drawRectangle({ x: 0, y: height - 120, width, height: 120, color: rgb(0.04, 0.18, 0.33) });
-  page.drawText('VOYAHUB', { x: 40, y: height - 62, size: 26, font: bold, color: rgb(1, 1, 1) });
+  page.drawText('EASYTRIP', { x: 40, y: height - 62, size: 26, font: bold, color: rgb(1, 1, 1) });
   page.drawText(input.orderNumber, {
     x: 40,
     y: height - 90,
@@ -234,7 +234,7 @@ async function buildTicketPdf(input: TicketArtifactInput, qrDataUrl: string): Pr
 /** Plain-text invoice/render used for email templates and the wallet page. */
 export function renderTicketSummary(input: TicketArtifactInput): string {
   const lines = [
-    `Voyahub e-ticket ${input.ticketNumber}`,
+    `EasyTrip e-ticket ${input.ticketNumber}`,
     `Order ${input.orderNumber}`,
     '',
     `${input.productName}`,

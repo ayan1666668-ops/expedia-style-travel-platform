@@ -23,7 +23,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const { slug } = await params;
   const locale = await resolveServerLocale();
   const t = createTranslator(locale);
-  const product = await api.product(slug).catch(() => null);
+  const product = await api.product(slug, {}, locale).catch(() => null);
   if (!product) return { title: t('product.notFound') };
 
   return {
@@ -47,7 +47,7 @@ export default async function ProductPage({ params, searchParams }: PageProps) {
   const quantity = Number(first(query.quantity) ?? 1);
 
   const [product, availability] = await Promise.all([
-    api.product(slug, { date: selectedDate, quantity }).catch(() => null),
+    api.product(slug, { date: selectedDate, quantity }, locale).catch(() => null),
     api.availability(slug, 90).catch(() => ({ from: '', days: [] as AvailabilityDay[] })),
   ]);
 

@@ -1159,7 +1159,62 @@ a.promo-card:hover {
 
 .product-media img { width: 100%; height: 100%; object-fit: cover; }
 
+/* Placeholder for a listing whose hero photo has not resolved. A muted tile
+   with a single mark reads as "image unavailable"; an emoji reads as broken. */
+.product-media-fallback {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  font-size: 28px;
+  color: var(--text-subtle);
+  background: linear-gradient(135deg, var(--bg-muted), var(--surface));
+}
+
+/* The positive badge ("Priority entry", "Instant confirmation"). Neutral rather
+   than accent-coloured: an accent ribbon reads as a promotion, which is the
+   opposite of the positioning we want. */
+.product-ribbon {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  padding: 4px 9px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(6px);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+}
+
 .product-body { display: flex; flex-direction: column; gap: var(--sp-2); min-width: 0; }
+
+/* Category · City, above the title. Uppercase and letter-spaced at 11px so it
+   reads as metadata rather than competing with the title. */
+.product-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--brand-700);
+}
+
+/* The category-specific facts (route, ship, star rating). Sits between the
+   title and the summary so the deciding detail is visible without reading. */
+.product-facts {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.45;
+}
+
+.product-fact-sep { color: var(--text-subtle); font-weight: 400; }
 
 .product-title {
   font-size: 17px;
@@ -1423,6 +1478,144 @@ a.promo-card:hover {
 }
 
 .price-row .label { color: var(--text-muted); font-weight: 500; }
+
+/* ==========================================================================
+   Hero
+   The brand promise sits above the headline, then the search, then the three
+   trust points. Type scale is deliberately large and the kicker is small and
+   letter-spaced — the hierarchy should read as a masthead, not an ad banner.
+   ========================================================================== */
+
+.hero-kicker {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin: 0 0 var(--sp-3);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.hero-kicker-mark {
+  padding: 4px 10px;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 999px;
+}
+
+.hero-title {
+  margin: 0;
+  font-size: clamp(30px, 5.2vw, 46px);
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+  font-weight: 700;
+}
+
+.hero-subtitle {
+  margin: var(--sp-4) 0 0;
+  max-width: 60ch;
+  font-size: 17px;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.hero-trust {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.hero-label {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-subtle);
+}
+
+/* ==========================================================================
+   Destination tile
+   A tall photo with the city name over a soft scrim. No card border and no
+   lift: the photograph is the tile, and a framed box around it reads as a
+   product listing rather than a place.
+   ========================================================================== */
+
+.destination-tile {
+  display: block;
+  overflow: hidden;
+  border-radius: var(--r-lg);
+  color: inherit;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.destination-tile:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-md);
+}
+
+.destination-tile:focus-visible {
+  outline: 2px solid var(--brand-500);
+  outline-offset: 3px;
+}
+
+.destination-media {
+  position: relative;
+  height: 168px;
+  overflow: hidden;
+  background: var(--bg-muted);
+}
+
+.destination-media img {
+  transition: transform 0.4s ease;
+}
+
+.destination-tile:hover .destination-media img {
+  transform: scale(1.04);
+}
+
+.destination-scrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(4, 10, 24, 0.78) 0%, rgba(4, 10, 24, 0.18) 52%, transparent 100%);
+}
+
+.destination-caption {
+  position: absolute;
+  inset: auto 0 0 0;
+  padding: var(--sp-3) var(--sp-4);
+  color: #fff;
+}
+
+.destination-name {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.destination-count {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+/* ==========================================================================
+   Loyalty panel
+   A deep brand-tinted panel rather than a flat tint, so the closing call to
+   action has the presence of a signature block.
+   ========================================================================== */
+
+.loyalty-panel {
+  background: linear-gradient(135deg, var(--brand-50) 0%, var(--surface) 62%);
+  border-color: var(--brand-100);
+}
 
 /* ==========================================================================
    Hero search

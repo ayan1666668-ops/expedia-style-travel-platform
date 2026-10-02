@@ -1,4 +1,4 @@
-# Voyahub
+# EasyTrip
 
 An Expedia-style, **self-owned product** travel marketplace. Attractions, tours, hotel
 rooms and transfers — all sold, priced, ticketed and redeemed through one in-house
@@ -112,11 +112,11 @@ All use the password **`Password123!`**.
 
 | Email | Role | What they can see |
 | --- | --- | --- |
-| `traveler@voyahub.test` | Customer | Bookings, e-tickets, points, reviews |
-| `admin@voyahub.test` | Admin | Dashboard, ledger, coupons, audit, staff tools |
-| `operator@voyahub.test` | Operator | Gate scanner at `/admin/scan` |
-| `merchant@voyahub.test` | Merchant | Own products and payouts |
-| `support@voyahub.test` | Support | Customer lookup, wallet adjustments, goodwill refunds, coupon verification |
+| `traveler@easytrip.test` | Customer | Bookings, e-tickets, points, reviews |
+| `admin@easytrip.test` | Admin | Dashboard, ledger, coupons, audit, staff tools |
+| `operator@easytrip.test` | Operator | Gate scanner at `/admin/scan` |
+| `merchant@easytrip.test` | Merchant | Own products and payouts |
+| `support@easytrip.test` | Support | Customer lookup, wallet adjustments, goodwill refunds, coupon verification |
 
 The login page has one-click fill buttons for the customer and staff accounts.
 
@@ -228,7 +228,7 @@ The UI ships in **English and Chinese**, switchable from the header on every pag
 from inside each console.
 
 **Server-rendered locale, not a client context.** `resolveServerLocale()` reads a
-`voyahub_lang` cookie and falls back to `Accept-Language`. Most of this site is
+`easytrip_lang` cookie and falls back to `Accept-Language`. Most of this site is
 server-rendered, so a client-side locale provider would leave the *common* case rendering
 in the previous language until the next navigation. Switching locale writes the cookie and
 calls `router.refresh()`, which re-renders on the server in the new language.
@@ -325,7 +325,7 @@ Operations: `GET /health`, `GET /ready` (per-dependency readiness).
 bash scripts/smoke-test.sh    # 34 checks, requires both services running
 bash scripts/mobile-check.sh  # 36 checks, responsive layer regression guard
 pnpm typecheck                # strict TS across api + web
-pnpm --filter @voyahub/web build
+pnpm --filter @easytrip/web build
 pnpm verify                   # typecheck + smoke + mobile, one command
 ```
 
@@ -333,7 +333,7 @@ The smoke suite is end-to-end against a live stack — it books a real order, pa
 redeems the ticket at the gate, and asserts the second scan is rejected.
 
 `mobile-check.sh` reads the **built** CSS at `apps/web/.next/static/css/*.css`, so run
-`pnpm --filter @voyahub/web build` first. `next dev` deletes that directory, which is why
+`pnpm --filter @easytrip/web build` first. `next dev` deletes that directory, which is why
 the check fails with "no built CSS found" if the dev server is the last thing that ran —
 run the build, then `next start`.
 
@@ -385,7 +385,7 @@ Everything is environment-driven with working defaults; see `.env.example`.
 
 | Variable | Default | Notes |
 | --- | --- | --- |
-| `DATABASE_URL` | `postgresql://voyahub:voyahub@localhost:5432/voyahub` | |
+| `DATABASE_URL` | `postgresql://easytrip:easytrip@localhost:5432/easytrip` | |
 | `REDIS_URL` | `redis://localhost:6379` | Falls back to memory if absent |
 | `PAYMENT_PROVIDER` | `mock` | `hyper` for Hyperswitch |
 | `INVENTORY_HOLD_MINUTES` | `15` | Checkout hold TTL |

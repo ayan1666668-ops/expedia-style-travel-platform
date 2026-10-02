@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { config } from '../config/env';
 import { prisma } from '../lib/prisma';
 import { resolveLocale } from '../plugins/auth';
-import { TYPE_LABELS, searchProducts } from '../modules/search/service';
+import { TYPE_LABELS, searchProducts, typeLabel } from '../modules/search/service';
 import { AppError } from '../utils/errors';
 
 const listSchema = z.object({
@@ -120,6 +120,7 @@ export async function searchRoutes(app: FastifyInstance): Promise<void> {
    */
   app.get('/search/categories', async (request) => {
     const query = z.object({ destination: z.string().trim().max(200).optional() }).parse(request.query);
+    const locale = resolveLocale(request);
 
     const rows = await prisma.searchDocument.groupBy({
       by: ['type'],
@@ -134,7 +135,7 @@ export async function searchRoutes(app: FastifyInstance): Promise<void> {
     const categories = rows
       .map((row) => ({
         type: row.type,
-        label: TYPE_LABELS[row.type] ?? row.type,
+        label: typeLabel(row.type, locale),
         productCount: row._count._all,
         fromPriceCents: row._min.basePriceCents ?? 0,
       }))
@@ -148,7 +149,10 @@ export async function searchRoutes(app: FastifyInstance): Promise<void> {
     const destinations = await prisma.destination.findMany({
       where: { level: 'CITY', isPopular: true },
       orderBy: { sortWeight: 'asc' },
-      take: 24,
+      // No hard cap: the catalogue now spans 34 cities across 14 countries, and
+      // a `take` here silently truncated the tail — Sydney and Melbourne simply
+      // vanished from the landing page and the geo coverage check. The home page
+      // still renders only the first 8; this endpoint is the full list.
       include: {
         products: {
           where: { status: 'PUBLISHED' },

@@ -8,6 +8,7 @@ import { api } from '@/lib/api';
 import { NotificationCenter } from '@/components/NotificationCenter';
 import type { LocaleCode } from '@/lib/i18n/config';
 import { createTranslator } from '@/lib/i18n/dictionaries';
+import { brandMark, brandName } from '@/lib/brand';
 
 /**
  * Customer-facing header.
@@ -104,11 +105,11 @@ export function Header({ locale }: { locale: LocaleCode }) {
   return (
     <header className="header">
       <div className="header-inner">
-        <Link href="/" className="logo" aria-label="Voyahub home">
+        <Link href="/" className="logo" aria-label={`${brandName(locale)} — ${t('nav.home')}`}>
           <span className="logo-mark" aria-hidden>
-            V
+            {brandMark(locale)}
           </span>
-          <span>Voyahub</span>
+          <span>{brandName(locale)}</span>
         </Link>
 
         <button

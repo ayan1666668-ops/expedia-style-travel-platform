@@ -28,7 +28,7 @@ head2() { printf '\n\033[1m%s\033[0m\n' "$1"; }
 head2 "Build output"
 
 if [[ -z "$CSS_FILE" ]]; then
-  bad "no built CSS found — run 'pnpm --filter @voyahub/web build' first"
+  bad "no built CSS found — run 'pnpm --filter @easytrip/web build' first"
   printf '\n  passed: %d\n  failed: %d\n' "$PASS" "$FAIL"
   exit 1
 fi

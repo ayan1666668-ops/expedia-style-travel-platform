@@ -1,5 +1,5 @@
 # ---------------------------------------------------------------------------
-# Voyahub local infrastructure
+# EasyTrip local infrastructure
 #
 #   docker compose up -d                    # Postgres + Redis (required core)
 #   docker compose --profile search up -d   # + OpenSearch
@@ -12,25 +12,25 @@
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: voyahub-postgres
+    container_name: easytrip-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: voyahub
-      POSTGRES_PASSWORD: voyahub
-      POSTGRES_DB: voyahub
+      POSTGRES_USER: easytrip
+      POSTGRES_PASSWORD: easytrip
+      POSTGRES_DB: easytrip
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U voyahub -d voyahub"]
+      test: ["CMD-SHELL", "pg_isready -U easytrip -d easytrip"]
       interval: 5s
       timeout: 5s
       retries: 20
 
   redis:
     image: redis:7-alpine
-    container_name: voyahub-redis
+    container_name: easytrip-redis
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
     ports:
@@ -45,14 +45,14 @@ services:
 
   opensearch:
     image: opensearchproject/opensearch:2.15.0
-    container_name: voyahub-opensearch
+    container_name: easytrip-opensearch
     restart: unless-stopped
     profiles: ["search"]
     environment:
       discovery.type: single-node
       plugins.security.disabled: "true"
       OPENSEARCH_JAVA_OPTS: "-Xms512m -Xmx512m"
-      OPENSEARCH_INITIAL_ADMIN_PASSWORD: "VoyahubDev_2024!"
+      OPENSEARCH_INITIAL_ADMIN_PASSWORD: "EasyTripDev_2024!"
     ulimits:
       memlock:
         soft: -1
@@ -64,13 +64,13 @@ services:
 
   minio:
     image: minio/minio:latest
-    container_name: voyahub-minio
+    container_name: easytrip-minio
     restart: unless-stopped
     profiles: ["storage"]
     command: ["server", "/data", "--console-address", ":9001"]
     environment:
-      MINIO_ROOT_USER: voyahub
-      MINIO_ROOT_PASSWORD: voyahub-secret
+      MINIO_ROOT_USER: easytrip
+      MINIO_ROOT_PASSWORD: easytrip-secret
     ports:
       - "9000:9000"
       - "9001:9001"

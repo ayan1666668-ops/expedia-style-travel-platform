@@ -7,6 +7,7 @@ import { readToken } from '@/lib/session';
 import { formatDate, relativeDay } from '@/lib/format';
 import type { LocaleCode } from '@/lib/i18n/config';
 import { createTranslator } from '@/lib/i18n/dictionaries';
+import { brandName } from '@/lib/brand';
 
 type WalletTicket = Awaited<ReturnType<typeof api.tickets>>[number];
 
@@ -77,7 +78,7 @@ export function TicketWallet({ locale }: { locale: LocaleCode }) {
           <div className="ticket-pass-header">
             <div style={{ minWidth: 0 }}>
               <div className="tiny" style={{ opacity: 0.8 }}>
-                {ticket.destinationName ?? 'Voyahub'}
+                {ticket.destinationName ?? brandName(locale)}
               </div>
               <div className="bold truncate" style={{ fontSize: 15 }}>
                 {ticket.productName}

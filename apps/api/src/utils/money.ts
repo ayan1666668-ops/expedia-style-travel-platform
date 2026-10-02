@@ -1,7 +1,7 @@
 /**
  * Money helpers.
  *
- * Every monetary value in Voyahub is an integer amount in the minor unit of
+ * Every monetary value in EasyTrip is an integer amount in the minor unit of
  * an ISO-4217 currency (cents for USD/EUR, pence for GBP). Floats are never
  * used for storage or arithmetic on money - only basis points (bps) are used
  * for percentages, and rounding is always half-up on the final cent.

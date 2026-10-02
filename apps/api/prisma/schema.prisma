@@ -203,6 +203,11 @@ enum ProductType {
   RESTAURANT
   CRUISE
   RENTAL_CAR
+  // Long-haul and regional air travel. Shares the Product/TicketType shape
+  // with everything else: a "variant" is a cabin class on a given date.
+  FLIGHT
+  // Pre/post stay car service keyed to a flight or hotel arrival.
+  AIRPORT_TRANSFER
 }
 
 enum FulfillmentMode {
@@ -264,6 +269,31 @@ model Product {
 
   cancellationPolicy CancellationPolicy?
   addOns             ProductAddOn[]
+
+  // --- Category-specific display fields -----------------------------------
+  // All nullable: a cruise leaves `airlineName` empty, a flight leaves
+  // `roomCategory` empty. Present so one card/detail template can render
+  // meaningful, category-appropriate information for every type.
+
+  // FLIGHT
+  airlineName  String? // e.g. "Singapore Airlines"
+  flightRoute  String? // e.g. "SIN → LHR"
+  cabinClass   String? // e.g. "Business"
+
+  // HOTEL_ROOM
+  roomCategory String? // e.g. "Deluxe King"
+  starCategory Int? // 1-5 official stars, distinct from the guest-rating score
+  boardBasis   String? // e.g. "Breakfast included"
+
+  // CRUISE
+  cruiseLine     String? // e.g. "Viking"
+  shipName       String? // e.g. "Viking Grace"
+  cruiseNights   Int?
+  itineraryPorts String[] @default([])
+
+  // GUIDED_TOUR / ACTIVITY / ATTRACTION_TICKET
+  groupSizeCap      Int? // max guests per departure
+  privateDeparture  Boolean @default(false) // bookable as an exclusive, private use
 
   ticketTypes    TicketType[]
   media          ProductMedia[]
