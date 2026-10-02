@@ -124,7 +124,7 @@ export async function buildServer(): Promise<FastifyInstance> {
   // ---------------------------------------------------------------------------
   // Health & readiness
   // ---------------------------------------------------------------------------
-  app.get('/health', async () => ({ status: 'ok', service: 'voyahub-api', env: config.env, uptime: process.uptime() }));
+  app.get('/health', async () => ({ status: 'ok', service: 'easytrip-api', env: config.env, uptime: process.uptime() }));
 
   app.get('/ready', async (_request, reply) => {
     const checks: Record<string, boolean> = {};
@@ -162,7 +162,7 @@ export async function buildServer(): Promise<FastifyInstance> {
   await app.register(realtimeRoutes, { prefix: '/api/v1' });
 
   app.get('/', async () => ({
-    service: 'Voyahub API',
+    service: 'EasyTrip API',
     version: '1.0.0',
     docs: '/api/v1',
     health: '/health',

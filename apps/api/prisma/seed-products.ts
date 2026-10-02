@@ -1,19 +1,31 @@
 import type { SeedProduct } from './seed-data';
+import { buildGlobalProducts } from './seed-global';
 
 /**
- * The product catalogue. Every entry is a real, bookable experience with its
- * own variants, pricing rules and cancellation policy - the same shape a
- * merchant would publish through the operator console.
+ * The product catalogue.
  *
- * Prices are in minor units (cents) of the variant's currency.
+ * Two layers, composed here:
+ *
+ *   - `FEATURED_PRODUCTS` (below) — hand-authored entries for specific,
+ *     named landmarks. These carry real place names, researched pricing and
+ *     individually written reviews, so they are what a shopper sees at the
+ *     top of a city rail.
+ *   - `buildGlobalProducts()` — a full six-category catalogue generated for
+ *     every city in the catalogue (see `seed-global.ts`), guaranteeing that no
+ *     destination is ever empty and that flights, hotels and cruises exist
+ *     everywhere, not just in the Western European cities that had data before.
+ *
+ * A hand-authored entry always wins over a generated one for the same slug, so
+ * the richer copy is never overwritten by a template.
  */
 
-export const PRODUCTS: SeedProduct[] = [
+const FEATURED_PRODUCTS: SeedProduct[] = [
   // =========================================================================
   // NEW YORK
   // =========================================================================
   {
     slug: 'top-view-observation-deck',
+    name: 'Skyline Observation Deck at One World Trade Center',
     type: 'ATTRACTION_TICKET',
     destinationSlug: 'new-york',
     merchantSlug: 'big-apple-attractions',
@@ -49,6 +61,7 @@ export const PRODUCTS: SeedProduct[] = [
     translations: [
       { locale: 'fr-FR', name: 'Observatoire One World Trade Center', summary: 'Vue panoramique à 360 degrés sur Manhattan depuis le 100e étage.' },
       { locale: 'de-DE', name: 'One World Trade Center Aussichtspunkt', summary: '360-Grad-Blick über Manhattan vom 100. Stockwerk.' },
+      { locale: 'zh', name: '世贸中心一号楼观景台', summary: '登上西半球速度最快的电梯直达第 100 层，从无遮挡的玻璃幕墙俯瞰曼哈顿、纽约港与自由女神像。日落前一小时是最佳时段。' },
     ],
     ticketTypes: [
       {
@@ -142,6 +155,7 @@ export const PRODUCTS: SeedProduct[] = [
   },
   {
     slug: 'central-park-bike-tour',
+    name: 'Central Park cycling tour with a local guide',
     type: 'GUIDED_TOUR',
     destinationSlug: 'new-york',
     merchantSlug: 'big-apple-attractions',
@@ -171,6 +185,9 @@ export const PRODUCTS: SeedProduct[] = [
     media: [
       { url: 'https://images.unsplash.com/photo-1571068316344-75bc76f77890?w=1200&q=80', altText: 'Cyclists riding through a tree-lined park path' },
       { url: 'https://images.unsplash.com/photo-1502744688674-c619d1586c9e?w=1200&q=80', altText: 'Aerial view of a large green urban park' },
+    ],
+    translations: [
+      { locale: 'zh', name: '中央公园骑行之旅（本地向导）', summary: '由本地向导带领，骑行穿越中央公园的林荫道与上西城。路线包含贝塞斯达露台、杰奎琳·肯尼迪水库与游客鲜少踏足的北侧林荫道，结束后步行游览上西区。' },
     ],
     ticketTypes: [
       {
@@ -240,6 +257,7 @@ export const PRODUCTS: SeedProduct[] = [
   },
   {
     slug: 'broadway-evening-show',
+    name: 'A Broadway evening, orchestra seats',
     type: 'ACTIVITY',
     fulfillment: 'CONFIRMATION',
     destinationSlug: 'new-york',
@@ -269,6 +287,9 @@ export const PRODUCTS: SeedProduct[] = [
     media: [
       { url: 'https://images.unsplash.com/photo-1503095396549-807759245b35?w=1200&q=80', altText: 'Red velvet seats in a theatre auditorium' },
       { url: 'https://images.unsplash.com/photo-1507676184212-d03ab07a01bf?w=1200&q=80', altText: 'Illuminated theatre stage with red curtains' },
+    ],
+    translations: [
+      { locale: 'zh', name: '百老汇之夜 · 乐池座位', summary: '预订长演不衰的音乐剧乐池座位，含演出厅优先入场、开演前可在楼座酒廊小酌，并附节目册。座位于演出当天由剧院安排。' },
     ],
     ticketTypes: [
       {
@@ -324,6 +345,7 @@ export const PRODUCTS: SeedProduct[] = [
   },
   {
     slug: 'nyc-hop-on-hop-off',
+    name: 'New York sightseeing, hop on and off',
     type: 'TRANSFER',
     destinationSlug: 'new-york',
     merchantSlug: 'big-apple-attractions',
@@ -352,6 +374,9 @@ export const PRODUCTS: SeedProduct[] = [
     media: [
       { url: 'https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=1200&q=80', altText: 'Double-decker sightseeing bus on a city street' },
       { url: 'https://images.unsplash.com/photo-1496588152823-86ff7695e68f?w=1200&q=80', altText: 'Yellow taxis on a busy Manhattan avenue' },
+    ],
+    translations: [
+      { locale: 'zh', name: '纽约全景观光巴士', summary: '双层敞篷巴士循环 34 个站点，覆盖 34 个街区，可在票期内无限次上下车。随车导游提供九语种实时讲解，车上配有免费 Wi-Fi。' },
     ],
     ticketTypes: [
       {
@@ -411,9 +436,10 @@ export const PRODUCTS: SeedProduct[] = [
   // =========================================================================
   {
     slug: 'tower-of-london-crown-shuttle',
+    name: 'The Tower of London, with the Crown Jewels',
     type: 'ATTRACTION_TICKET',
     destinationSlug: 'london',
-    merchantSlug: 'voyahub-direct',
+    merchantSlug: 'easytrip-direct',
     latitude: 51.5081,
     longitude: -0.0759,
     addressLine: 'Tower Hill, London EC3N 4DY',
@@ -440,6 +466,9 @@ export const PRODUCTS: SeedProduct[] = [
       { url: 'https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=1200&q=80', altText: 'Tower Bridge over the Thames at dusk' },
       { url: 'https://images.unsplash.com/photo-1591557328080-9f0b4b2b3b0f?w=1200&q=80', altText: 'Historic stone tower and battlements' },
     ],
+    translations: [
+      { locale: 'zh', name: '伦敦塔 · 含王冠珠宝', summary: '伦敦塔核心区的千年历史。门票含伦敦塔建筑群、王冠与灌木园、军械库，以及由 Beefeater 亲自带领的仪仗卫队导览。出口步行片刻即可到达碎片大厦与河景。' },
+    ],
     ticketTypes: [
       { code: 'TOL-STANDARD', name: 'Standard entry', basePriceCents: 3400, compareAtCents: 4100, costCents: 2100, taxBps: 2000, capacity: 80, netPriceCents: 2100 },
       { code: 'TOL-CROWN', name: 'Crown Jewels guided tour', description: 'Adds a specialist-led tour inside the Jewel House.', basePriceCents: 5900, costCents: 3800, taxBps: 2000, capacity: 25, netPriceCents: 3800 },
@@ -465,9 +494,10 @@ export const PRODUCTS: SeedProduct[] = [
   },
   {
     slug: 'west-end-theatre-walking-tour',
+    name: 'West End Theatreland walking tour',
     type: 'GUIDED_TOUR',
     destinationSlug: 'london',
-    merchantSlug: 'voyahub-direct',
+    merchantSlug: 'easytrip-direct',
     latitude: 51.5127,
     longitude: -0.1281,
     addressLine: 'Meet at the Statue of Eros, Piccadilly Circus, London',
@@ -494,6 +524,9 @@ export const PRODUCTS: SeedProduct[] = [
       { url: 'https://images.unsplash.com/photo-1519677100203-a0e668c92439?w=1200&q=80', altText: 'Illuminated theatre marquees at night' },
       { url: 'https://images.unsplash.com/photo-1533929736458-ca588d08c8be?w=1200&q=80', altText: 'London street lit up in the evening' },
     ],
+    translations: [
+      { locale: 'zh', name: '西区剧院区徒步导览', summary: '跟随灯光走进伦敦西区。向导会带您经过莎士比亚时期剧场旧址、创下演出纪录的音乐剧首演地，以及幕后代名流常光顾的老酒吧，并在苏豪一间百年酒馆小憩。全程约 2.5 小时，小团步行。' },
+    ],
     ticketTypes: [
       { code: 'WEWT-ADULT', name: 'Adult', basePriceCents: 3200, compareAtCents: 4000, costCents: 1900, taxBps: 2000, inventoryMode: 'PER_SLOT', capacity: 15, timeSlots: ['14:00', '18:00'], netPriceCents: 1900 },
       { code: 'WEWT-CONCESSION', name: 'Student / senior', basePriceCents: 2600, costCents: 1500, taxBps: 2000, inventoryMode: 'PER_SLOT', maxPerOrder: 8, capacity: 15, timeSlots: ['14:00', '18:00'], netPriceCents: 1500 },
@@ -514,9 +547,10 @@ export const PRODUCTS: SeedProduct[] = [
   },
   {
     slug: 'thames-sunset-cruise',
+    name: 'Thames sunset cruise past Tower Bridge',
     type: 'CRUISE',
     destinationSlug: 'london',
-    merchantSlug: 'voyahub-direct',
+    merchantSlug: 'easytrip-direct',
     latitude: 51.5072,
     longitude: -0.1173,
     addressLine: 'Pier 400, Victoria Embankment, London',
@@ -542,6 +576,9 @@ export const PRODUCTS: SeedProduct[] = [
     media: [
       { url: 'https://images.unsplash.com/photo-1533929736458-ca588d08c8be?w=1200&q=80', altText: 'River boats on the Thames at dusk' },
       { url: 'https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=1200&q=80', altText: 'Tower Bridge illuminated at night' },
+    ],
+    translations: [
+      { locale: 'zh', name: '泰晤士河日落游船', summary: '自威斯敏斯特至塔楼码头的两小时玻璃顶游船，全程由历史学者现场讲解。日落班次更含一杯起泡酒。不对号入座，建议早到占靠栏座位。' },
     ],
     ticketTypes: [
       { code: 'TSC-DAY', name: 'Daytime cruise', basePriceCents: 2600, costCents: 1500, taxBps: 2000, inventoryMode: 'PER_SLOT', capacity: 80, timeSlots: ['11:00', '14:00'], netPriceCents: 1500 },
@@ -573,9 +610,10 @@ export const PRODUCTS: SeedProduct[] = [
   // =========================================================================
   {
     slug: 'louvre-museum-ticket',
+    name: 'The Louvre, with priority entry',
     type: 'ATTRACTION_TICKET',
     destinationSlug: 'paris',
-    merchantSlug: 'voyahub-direct',
+    merchantSlug: 'easytrip-direct',
     latitude: 48.8606,
     longitude: 2.3376,
     addressLine: 'Rue de Rivoli, 75001 Paris',
@@ -604,6 +642,7 @@ export const PRODUCTS: SeedProduct[] = [
     ],
     translations: [
       { locale: 'fr-FR', name: 'Billet du musée du Louvre', summary: 'Accès prioritaire au Louvre, Mona Lisa et antiquités égyptiennes incluses.' },
+      { locale: 'zh', name: '卢浮宫 · 优先入场', summary: '从优先通道进入全球参观人数最多的博物馆：德农与黎塞留两个展区、文艺复兴名作与中世纪卢浮宫要塞均包含在内。建议上午十一点后从黎塞留翼开始参观，人流最少。' },
     ],
     ticketTypes: [
       { code: 'LOU-STD', name: 'Standard entry', basePriceCents: 2400, compareAtCents: 2900, costCents: 1500, taxBps: 2000, capacity: 100, netPriceCents: 1500 },
@@ -631,9 +670,10 @@ export const PRODUCTS: SeedProduct[] = [
   },
   {
     slug: 'paris-seine-dinner-cruise',
+    name: 'Dinner on the Seine, with a string quartet',
     type: 'CRUISE',
     destinationSlug: 'paris',
-    merchantSlug: 'voyahub-direct',
+    merchantSlug: 'easytrip-direct',
     latitude: 48.8584,
     longitude: 2.3008,
     addressLine: 'Port de la Conférence, Pont de l’Alma, 75008 Paris',
@@ -660,6 +700,9 @@ export const PRODUCTS: SeedProduct[] = [
       { url: 'https://images.unsplash.com/photo-1549144511-f099e773c147?w=1200&q=80', altText: 'Eiffel Tower illuminated at night' },
       { url: 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=1200&q=80', altText: 'Paris rooftops and river at sunset' },
     ],
+    translations: [
+      { locale: 'zh', name: '塞纳河晚餐游船 · 现场弦乐四重奏', summary: '在塞纳河上用餐，看着城市灯火滑过圣母院、卢浮宫与埃菲尔铁塔。晚间含三道式法餐、现场弦乐四重奏与本地葡萄酒畅饮，分 19:00 与 21:15 两班。' },
+    ],
     ticketTypes: [
       { code: 'PSD-EARLY', name: '19:00 early seating', basePriceCents: 13500, compareAtCents: 16500, costCents: 9500, taxBps: 2000, feeBps: 400, inventoryMode: 'PER_SLOT', capacity: 90, timeSlots: ['19:00'], netPriceCents: 9500 },
       { code: 'PSD-LATE', name: '21:15 late seating', basePriceCents: 15500, costCents: 11000, taxBps: 2000, feeBps: 400, inventoryMode: 'PER_SLOT', capacity: 90, timeSlots: ['21:15'], netPriceCents: 11000 },
@@ -682,9 +725,10 @@ export const PRODUCTS: SeedProduct[] = [
   },
   {
     slug: 'montmartre-food-walk',
+    name: 'A food walk through Montmartre',
     type: 'GUIDED_TOUR',
     destinationSlug: 'paris',
-    merchantSlug: 'voyahub-direct',
+    merchantSlug: 'easytrip-direct',
     latitude: 48.8867,
     longitude: 2.3431,
     addressLine: 'Meet at Abbesses metro station, rue des Abbesses, 75018 Paris',
@@ -711,6 +755,9 @@ export const PRODUCTS: SeedProduct[] = [
       { url: 'https://images.unsplash.com/photo-1550989460-0adf9ea622e2?w=1200&q=80', altText: 'Parisian cafe terraces in Montmartre' },
       { url: 'https://images.unsplash.com/photo-1509042239860-f550ce710b93?w=1200&q=80', altText: 'Cheese and charcuterie on a board' },
     ],
+    translations: [
+      { locale: 'zh', name: '蒙马特美食徒步', summary: '在毕加索与图卢兹-洛特鲁瓦曾居住的街区边走边吃。向导曾任美食记者，带您探访奶酪窖、百年面包房与 300 年历史地窖酒馆三处小馆，每站均有品鉴。最多 10 位客人。' },
+    ],
     ticketTypes: [
       { code: 'MFW-ADULT', name: 'Adult', basePriceCents: 7800, compareAtCents: 9200, costCents: 4900, taxBps: 2000, inventoryMode: 'PER_SLOT', capacity: 10, timeSlots: ['11:00', '17:00'], netPriceCents: 4900 },
       { code: 'MFW-NONDRINK', name: 'Adult (no alcohol)', basePriceCents: 6400, costCents: 4000, taxBps: 2000, inventoryMode: 'PER_SLOT', maxPerOrder: 8, capacity: 10, timeSlots: ['11:00', '17:00'], netPriceCents: 4000 },
@@ -736,9 +783,10 @@ export const PRODUCTS: SeedProduct[] = [
   // =========================================================================
   {
     slug: 'colosseum-underground-full-experience',
+    name: 'Colosseum underground, Forum and Palatine',
     type: 'ATTRACTION_TICKET',
     destinationSlug: 'rome',
-    merchantSlug: 'voyahub-direct',
+    merchantSlug: 'easytrip-direct',
     latitude: 41.8902,
     longitude: 12.4922,
     addressLine: 'Piazza del Colosseo, 00184 Roma',
@@ -767,6 +815,7 @@ export const PRODUCTS: SeedProduct[] = [
     ],
     translations: [
       { locale: 'it-IT', name: 'Colosseo, Ipogeo e Foro Romano', summary: 'Accesso all’Ipogeo, al Foro Romano e al Palatino con visita guidata.' },
+      { locale: 'zh', name: '斗兽场地下层 · 竞技场与古罗马广场', summary: '不止于地面参观：下行至角斗士候场的地下层，在利克托尔护卫下走上竞技场地面，再由古罗马广场与帕拉蒂尼山音频导览完整呈现。分时入场，人流更舒适。' },
     ],
     ticketTypes: [
       { code: 'COL-STD', name: 'Standard Colosseum + Forum', basePriceCents: 2900, compareAtCents: 3600, costCents: 1800, taxBps: 2200, capacity: 60, netPriceCents: 1800 },
@@ -793,6 +842,7 @@ export const PRODUCTS: SeedProduct[] = [
   },
   {
     slug: 'florence-uffizi-academy-tour',
+    name: 'The Uffizi with an art historian',
     type: 'ATTRACTION_TICKET',
     destinationSlug: 'florence',
     merchantSlug: 'tuscany-slow-travel',
@@ -822,6 +872,9 @@ export const PRODUCTS: SeedProduct[] = [
       { url: 'https://images.unsplash.com/photo-1543429776-2782fc586c70?w=1200&q=80', altText: 'Florence skyline and Duomo' },
       { url: 'https://images.unsplash.com/photo-1577083552431-6e5fd01988f5?w=1200&q=80', altText: 'Renaissance painting in an ornate gallery' },
     ],
+    translations: [
+      { locale: 'zh', name: '乌菲兹美术馆 · 艺术史家导览', summary: '看乌菲兹需要一位能把文艺复兴放进背景的向导。门票含优先入场与两小时小团导览，涵盖波提切利展厅、达·芬奇《圣告》、米开朗琪罗《多纳太罗之女》与威尼斯画派精品。' },
+    ],
     ticketTypes: [
       { code: 'UFF-ENTRY', name: 'Self-guided entry', basePriceCents: 2200, costCents: 1400, taxBps: 2200, capacity: 70, netPriceCents: 1400 },
       { code: 'UFF-GUIDED', name: 'Guided highlights tour', description: 'Entry plus 2 hours with an art historian.', basePriceCents: 6400, compareAtCents: 7800, costCents: 4200, taxBps: 2200, inventoryMode: 'PER_SLOT', maxPerOrder: 8, capacity: 12, timeSlots: ['09:00', '11:30', '14:00', '16:00'], netPriceCents: 4200 },
@@ -843,6 +896,7 @@ export const PRODUCTS: SeedProduct[] = [
   },
   {
     slug: 'venice-gondola-grand-canal',
+    name: 'Venice by gondola, with a prosecco toast',
     type: 'ACTIVITY',
     destinationSlug: 'venice',
     merchantSlug: 'tuscany-slow-travel',
@@ -871,6 +925,9 @@ export const PRODUCTS: SeedProduct[] = [
     media: [
       { url: 'https://images.unsplash.com/photo-1523906834658-6e24ef2386f9?w=1200&q=80', altText: 'Venetian canal with historic palazzi' },
       { url: 'https://images.unsplash.com/photo-1514890547357-a9ee288728e0?w=1200&q=80', altText: 'Gondolas moored along a canal' },
+    ],
+    translations: [
+      { locale: 'zh', name: '威尼斯贡多拉 · 大运河巡游', summary: '乘传统贡多拉漂流大运河，经过里亚托桥、卡雷佐尼科宫与总督宫。船夫会在行船间唱一段本地船歌，行程结束后在附近的 bacaro 小馆享用一杯普罗塞克起泡酒。' },
     ],
     ticketTypes: [
       { code: 'GON-STD', name: 'Standard 30-minute ride', basePriceCents: 9000, compareAtCents: 11000, costCents: 6500, taxBps: 2200, inventoryMode: 'PER_SLOT', maxPerOrder: 5, capacity: 4, timeSlots: ['10:00', '12:00', '15:00', '17:00', '19:00'], netPriceCents: 6500 },
@@ -901,9 +958,10 @@ export const PRODUCTS: SeedProduct[] = [
   // =========================================================================
   {
     slug: 'sagrada-familia-tower-lift',
+    name: 'Sagrada Família, with the Nativity tower lift',
     type: 'ATTRACTION_TICKET',
     destinationSlug: 'barcelona',
-    merchantSlug: 'voyahub-direct',
+    merchantSlug: 'easytrip-direct',
     latitude: 41.4036,
     longitude: 2.1744,
     addressLine: 'Carrer de Mallorca, 401, 08013 Barcelona',
@@ -932,6 +990,7 @@ export const PRODUCTS: SeedProduct[] = [
     ],
     translations: [
       { locale: 'es-ES', name: 'Sagrada Família con torre y ascensor', summary: 'Entrada con horario al templo de Gaudí, ascensor a la torre Nacimiento y museo de la cripta.' },
+      { locale: 'zh', name: '圣家堂 · 圣诞塔登顶', summary: '高迪未完成的杰作，配登塔电梯才真正看懂。门票含圣诞塔电梯、高迪墓所在的地下墓室与受难立面，并提供六语种语音导览。建议选择上午十点的时段。' },
     ],
     ticketTypes: [
       { code: 'SF-STD', name: 'Standard entry', basePriceCents: 2600, compareAtCents: 3400, costCents: 1700, taxBps: 2100, capacity: 80, netPriceCents: 1700 },
@@ -959,6 +1018,7 @@ export const PRODUCTS: SeedProduct[] = [
   },
   {
     slug: 'barcelona-gothic-quarter-food-tour',
+    name: 'Tapas and markets in the Gothic Quarter',
     type: 'GUIDED_TOUR',
     destinationSlug: 'barcelona',
     merchantSlug: 'albaicina-transfers',
@@ -988,6 +1048,9 @@ export const PRODUCTS: SeedProduct[] = [
       { url: 'https://images.unsplash.com/photo-1539037116277-4db20889f2d4?w=1200&q=80', altText: 'Narrow gothic quarter streets in Barcelona' },
       { url: 'https://images.unsplash.com/photo-1540189549336-e6e99c3679fe?w=1200&q=80', altText: 'Tapas and small plates on a bar counter' },
     ],
+    translations: [
+      { locale: 'zh', name: '哥特区塔帕斯与市集徒步', summary: '跟着本地向导走遍巴塞罗那最古老的街区：探访已传四代的面包房，在市集摊位尝小食，在 pintxos 吧台站着吃一顿，最后登上能俯瞰主教座堂的屋顶平台收尾。最多 12 位客人。' },
+    ],
     ticketTypes: [
       { code: 'BGFT-ADULT', name: 'Adult', basePriceCents: 6500, compareAtCents: 7900, costCents: 4200, taxBps: 2100, inventoryMode: 'PER_SLOT', capacity: 12, timeSlots: ['11:00', '16:00'], netPriceCents: 4200 },
       { code: 'BGFT-CHILD', name: 'Child (6–12)', basePriceCents: 3900, costCents: 2500, taxBps: 2100, inventoryMode: 'PER_SLOT', maxPerOrder: 6, capacity: 6, timeSlots: ['11:00', '16:00'], netPriceCents: 2500 },
@@ -1009,6 +1072,7 @@ export const PRODUCTS: SeedProduct[] = [
   },
   {
     slug: 'madrid-flamenco-tablao-show',
+    name: 'An evening of flamenco, with dinner',
     type: 'ACTIVITY',
     destinationSlug: 'madrid',
     merchantSlug: 'albaicina-transfers',
@@ -1038,6 +1102,9 @@ export const PRODUCTS: SeedProduct[] = [
       { url: 'https://images.unsplash.com/photo-1558642084-fd07fae5282e?w=1200&q=80', altText: 'Spanish courtyard architecture at dusk' },
       { url: 'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=1200&q=80', altText: 'Flamenco dancer in a red dress' },
     ],
+    translations: [
+      { locale: 'zh', name: '弗拉门戈之夜 · 含晚餐', summary: '弗拉门戈要在小场馆、近距离听才过瘾。这场 50 分钟的演出在 18 世纪地窖中进行，由 Mar i qui 家族的歌手、吉他手与舞者呈现，随后在庭院享用三道式塔帕斯晚餐。' },
+    ],
     ticketTypes: [
       { code: 'FLM-TABLE', name: 'Table seat', basePriceCents: 5800, compareAtCents: 6900, costCents: 3600, taxBps: 2100, inventoryMode: 'PER_SLOT', capacity: 40, timeSlots: ['19:00', '21:30'], netPriceCents: 3600 },
       { code: 'FLM-BAR', name: 'Bar stool seat', basePriceCents: 4200, costCents: 2600, taxBps: 2100, inventoryMode: 'PER_SLOT', capacity: 20, timeSlots: ['19:00', '21:30'], netPriceCents: 2600 },
@@ -1059,6 +1126,7 @@ export const PRODUCTS: SeedProduct[] = [
   },
   {
     slug: 'seville-cathedral-bell-tower-rooftop',
+    name: 'Seville Cathedral and the Giralda rooftop',
     type: 'ATTRACTION_TICKET',
     destinationSlug: 'seville',
     merchantSlug: 'albaicina-transfers',
@@ -1088,6 +1156,9 @@ export const PRODUCTS: SeedProduct[] = [
       { url: 'https://images.unsplash.com/photo-1558642084-fd07fae5282e?w=1200&q=80', altText: 'Seville cathedral and Giralda tower' },
       { url: 'https://images.unsplash.com/photo-1509840841025-9088ba78a826?w=1200&q=80', altText: 'Warm Andalusian courtyard at sunset' },
     ],
+    translations: [
+      { locale: 'zh', name: '塞维利亚主教座堂 · 吉拉尔达塔顶', summary: '吉拉尔达塔曾是清真寺的宣礼塔，35 段坡道代替楼梯正是当年为登塔者与骑马者设计的。登顶可俯瞰塞维利亚全城，再下行参观主教座堂与哥伦布陵墓。' },
+    ],
     ticketTypes: [
       { code: 'GIR-FULL', name: 'Giralda + Cathedral', basePriceCents: 1800, compareAtCents: 2300, costCents: 1100, taxBps: 2100, capacity: 50, netPriceCents: 1100 },
       { code: 'GIR-ROOF', name: 'Rooftop access only', basePriceCents: 1200, costCents: 700, taxBps: 2100, capacity: 30, netPriceCents: 700 },
@@ -1113,9 +1184,10 @@ export const PRODUCTS: SeedProduct[] = [
   // =========================================================================
   {
     slug: 'van-gogh-museum-ticket',
+    name: 'Van Gogh Museum, timed entry',
     type: 'ATTRACTION_TICKET',
     destinationSlug: 'amsterdam',
-    merchantSlug: 'voyahub-direct',
+    merchantSlug: 'easytrip-direct',
     latitude: 52.3584,
     longitude: 4.8811,
     addressLine: 'Museumplein 6, 1071 Amsterdam',
@@ -1142,6 +1214,9 @@ export const PRODUCTS: SeedProduct[] = [
       { url: 'https://images.unsplash.com/photo-1577083552431-6e5fd01988f5?w=1200&q=80', altText: 'Post-impressionist painting on a gallery wall' },
       { url: 'https://images.unsplash.com/photo-1534351590666-13e3e96b5017?w=1200&q=80', altText: 'Amsterdam canal houses at dusk' },
     ],
+    translations: [
+      { locale: 'zh', name: '梵高博物馆 · 分时入场', summary: '全球规模最大的梵高作品收藏，呈现他在阿姆斯特丹的创作期。门票含主展区、平时不开放的德加西尔收藏翼，以及以他本人书信为音频的多媒体导览，并支持当日二次入场。' },
+    ],
     ticketTypes: [
       { code: 'VGM-STD', name: 'Standard timed entry', basePriceCents: 2100, compareAtCents: 2500, costCents: 1350, taxBps: 2100, capacity: 60, netPriceCents: 1350 },
       { code: 'VGM-COMBO', name: 'Van Gogh + Rijksmuseum', description: 'Both museums on one day, with transport between them.', basePriceCents: 3800, compareAtCents: 4600, costCents: 2500, taxBps: 2100, capacity: 40, netPriceCents: 2500 },
@@ -1165,9 +1240,10 @@ export const PRODUCTS: SeedProduct[] = [
   },
   {
     slug: 'amsterdam-canal-cruise-evening',
+    name: 'An evening on the Amsterdam canals',
     type: 'CRUISE',
     destinationSlug: 'amsterdam',
-    merchantSlug: 'voyahub-direct',
+    merchantSlug: 'easytrip-direct',
     latitude: 52.3676,
     longitude: 4.9041,
     addressLine: 'Prinsengracht 263, 1016 GV Amsterdam',
@@ -1194,6 +1270,9 @@ export const PRODUCTS: SeedProduct[] = [
       { url: 'https://images.unsplash.com/photo-1534351590666-13e3e96b5017?w=1200&q=80', altText: 'Amsterdam canal houses lit at night' },
       { url: 'https://images.unsplash.com/photo-1513407030348-c983a97b98d8?w=1200&q=80', altText: 'Canal with boats and bicycles' },
     ],
+    translations: [
+      { locale: 'zh', name: '阿姆斯特丹运河夜游', summary: '运河环带是联合国教科文组织世界遗产，黄昏时最美。此一小时游船经过最窄的房子、最高的小桥与最亮眼的货栈仓，沿途供应荷兰奶酪与白葡萄酒，船长本身就是在这条运河上长大的。' },
+    ],
     ticketTypes: [
       { code: 'ACC-STD', name: 'Standard evening cruise', basePriceCents: 2400, costCents: 1400, taxBps: 2100, inventoryMode: 'PER_SLOT', capacity: 25, timeSlots: ['18:00', '20:00'], netPriceCents: 1400 },
       { code: 'ACC-PRIV', name: 'Private boat (up to 8)', basePriceCents: 12000, costCents: 7500, taxBps: 2100, inventoryMode: 'PER_SLOT', minPerOrder: 1, maxPerOrder: 1, capacity: 2, timeSlots: ['18:00', '20:00'], netPriceCents: 7500 },
@@ -1218,6 +1297,7 @@ export const PRODUCTS: SeedProduct[] = [
   // =========================================================================
   {
     slug: 'hollywood-hops-on-hops-off',
+    name: 'Hollywood and Beverly Hills sightseeing',
     type: 'TRANSFER',
     destinationSlug: 'los-angeles',
     merchantSlug: 'big-apple-attractions',
@@ -1247,6 +1327,9 @@ export const PRODUCTS: SeedProduct[] = [
       { url: 'https://images.unsplash.com/photo-1534190760961-74e8c1c5c3da?w=1200&q=80', altText: 'Hollywood Boulevard and the theatre marquees' },
       { url: 'https://images.unsplash.com/photo-1515894347712-4d9164b20e94?w=1200&q=80', altText: 'Palm-lined boulevard in Los Angeles' },
     ],
+    translations: [
+      { locale: 'zh', name: '好莱坞与比佛利山庄观光', summary: '两条敞篷线路串联好莱坞大道、比佛利山庄与太平洋海岸，随车导游讲述每个街区的历史。可升级为明星宅邸之旅，走进两间仍在运作的摄影棚。' },
+    ],
     ticketTypes: [
       { code: 'LHH-1DAY', name: '1-day pass', basePriceCents: 4400, compareAtCents: 5400, costCents: 2600, taxBps: 1025, inventoryMode: 'UNLIMITED', maxPerOrder: 10, capacity: 2000, netPriceCents: 2600 },
       { code: 'LHH-2DAY', name: '2-day pass', basePriceCents: 6400, costCents: 3800, taxBps: 1025, inventoryMode: 'UNLIMITED', maxPerOrder: 10, capacity: 2000, netPriceCents: 3800 },
@@ -1268,6 +1351,7 @@ export const PRODUCTS: SeedProduct[] = [
   },
   {
     slug: 'grand-canyon-south-rim-day-trip',
+    name: 'Grand Canyon South Rim, with a guide',
     type: 'DAY_TRIP',
     destinationSlug: 'las-vegas',
     merchantSlug: 'big-apple-attractions',
@@ -1297,6 +1381,9 @@ export const PRODUCTS: SeedProduct[] = [
       { url: 'https://images.unsplash.com/photo-1474044159687-1ee9f3a51722?w=1200&q=80', altText: 'Grand Canyon rim at sunrise' },
       { url: 'https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?w=1200&q=80', altText: 'Desert landscape with layered rock' },
     ],
+    translations: [
+      { locale: 'zh', name: '大峡谷南缘 · 向导一日', summary: '自拉斯维加斯出发最具震撼力的一日。驱车穿越莫哈韦沙漠，正好在晨光初照时抵达南缘。行程含 Rim Trail 徒步、地质博物馆、峡谷内午餐与各观景点，十二人以内小团。' },
+    ],
     ticketTypes: [
       { code: 'GC-STD', name: 'Standard day tour', basePriceCents: 19900, compareAtCents: 24900, costCents: 13200, taxBps: 1025, capacity: 12, netPriceCents: 13200 },
       { code: 'GC-HELI', name: 'Helicopter tour upgrade', description: 'Fly over the West Rim and land in the canyon floor.', basePriceCents: 38900, costCents: 28000, taxBps: 1025, inventoryMode: 'PER_SLOT', minPerOrder: 1, maxPerOrder: 1, capacity: 6, timeSlots: ['07:00'], netPriceCents: 28000 },
@@ -1321,6 +1408,7 @@ export const PRODUCTS: SeedProduct[] = [
   },
   {
     slug: 'golden-gate-bike-tour-sa',
+    name: 'Cycle the Golden Gate Bridge to Sausalito',
     type: 'GUIDED_TOUR',
     destinationSlug: 'san-francisco',
     merchantSlug: 'big-apple-attractions',
@@ -1351,6 +1439,9 @@ export const PRODUCTS: SeedProduct[] = [
       { url: 'https://images.unsplash.com/photo-1501594907352-04cda38ebc29?w=1200&q=80', altText: 'Golden Gate Bridge in fog' },
       { url: 'https://images.unsplash.com/photo-1501594907352-04cda38ebc29?w=1200&q=80', altText: 'Bay area hills and water' },
     ],
+    translations: [
+      { locale: 'zh', name: '骑行金门大桥至索萨利托', summary: '从市区穿过 Presidio 公园，骑上金门大桥抵达海边小镇索萨利托，返程乘渡轮经过恶魔岛与旧金山监狱，一天之内把桥与海湾都看完。含电助力车、头盔与渡轮。' },
+    ],
     ticketTypes: [
       { code: 'SFG-STD', name: 'Standard (city to Sausalito)', basePriceCents: 11900, compareAtCents: 14500, costCents: 7800, taxBps: 1025, capacity: 12, netPriceCents: 7800 },
       { code: 'SFG-EBIKE', name: 'E-bike upgrade', basePriceCents: 14900, costCents: 10500, taxBps: 1025, inventoryMode: 'PER_SLOT', maxPerOrder: 6, capacity: 8, timeSlots: ['09:00', '10:30'], netPriceCents: 10500 },
@@ -1372,6 +1463,7 @@ export const PRODUCTS: SeedProduct[] = [
   },
   {
     slug: 'willis-tower-skydeck',
+    name: 'Willis Tower Skydeck over the Chicago River',
     type: 'ATTRACTION_TICKET',
     destinationSlug: 'chicago',
     merchantSlug: 'big-apple-attractions',
@@ -1401,6 +1493,9 @@ export const PRODUCTS: SeedProduct[] = [
       { url: 'https://images.unsplash.com/photo-1494522855154-9297ac14b55f?w=1200&q=80', altText: 'Chicago skyline and lakefront' },
       { url: 'https://images.unsplash.com/photo-1514924013411-cbf25faa35bb?w=1200&q=80', altText: 'City skyline from a high vantage point' },
     ],
+    translations: [
+      { locale: 'zh', name: '威利斯大厦观景台', summary: '观景台悬挑出大楼边缘十英尺，脚下即透明玻璃地板，中间没有任何倾斜玻璃，可以垂直向下看。天气晴好时可远眺密歇根湖一百二十英里。' },
+    ],
     ticketTypes: [
       { code: 'WT-STANDARD', name: 'Standard entry', basePriceCents: 3400, compareAtCents: 4200, costCents: 2200, taxBps: 1125, capacity: 50, netPriceCents: 2200 },
       { code: 'WT-SUNSET', name: 'Sunset entry', description: 'Arrive before sunset and watch the city light up.', basePriceCents: 4900, costCents: 3300, taxBps: 1125, capacity: 30, netPriceCents: 3300 },
@@ -1421,6 +1516,7 @@ export const PRODUCTS: SeedProduct[] = [
   },
   {
     slug: 'miami-bay-sunset-sail',
+    name: 'A sunset sail on Biscayne Bay',
     type: 'CRUISE',
     destinationSlug: 'miami',
     merchantSlug: 'big-apple-attractions',
@@ -1450,6 +1546,9 @@ export const PRODUCTS: SeedProduct[] = [
       { url: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=1200&q=80', altText: 'Miami beach and turquoise water' },
       { url: 'https://images.unsplash.com/photo-1518552718881-7f1813701a86?w=1200&q=80', altText: 'Sailboat on open water at sunset' },
     ],
+    translations: [
+      { locale: 'zh', name: '比斯坎湾日落帆船', summary: '乘 40 尺双体帆船驶出比斯坎湾，掠过迈阿密市中心天际线与迈阿密港。晚间含三道式晚餐与酒水畅饮，船员还会在夕阳里为您拍下与天际线的合影。' },
+    ],
     ticketTypes: [
       { code: 'MBS-SUNSET', name: 'Sunset sailing', basePriceCents: 8500, compareAtCents: 10500, costCents: 5800, taxBps: 700, feeBps: 500, inventoryMode: 'PER_SLOT', capacity: 40, timeSlots: ['17:30', '18:30'], netPriceCents: 5800 },
       { code: 'MBS-VIP', name: 'VIP front-deck table', basePriceCents: 14500, costCents: 10500, taxBps: 700, feeBps: 500, inventoryMode: 'PER_SLOT', maxPerOrder: 6, capacity: 8, timeSlots: ['17:30'], netPriceCents: 10500 },
@@ -1475,9 +1574,10 @@ export const PRODUCTS: SeedProduct[] = [
   // =========================================================================
   {
     slug: 'edinburgh-castle-royal-miles-tour',
+    name: 'Edinburgh Castle and the Royal Mile',
     type: 'ATTRACTION_TICKET',
     destinationSlug: 'edinburgh',
-    merchantSlug: 'voyahub-direct',
+    merchantSlug: 'easytrip-direct',
     latitude: 55.9486,
     longitude: -3.1999,
     addressLine: 'Edinburgh Castle, Edinburgh EH1 2RE',
@@ -1503,6 +1603,9 @@ export const PRODUCTS: SeedProduct[] = [
       { url: 'https://images.unsplash.com/photo-1506377585622-bedcbb027afc?w=1200&q=80', altText: 'Edinburgh castle on its crag' },
       { url: 'https://images.unsplash.com/photo-1552832230-c0197dd311b5?w=1200&q=80', altText: 'Historic stone buildings on a cobbled street' },
     ],
+    translations: [
+      { locale: 'zh', name: '爱丁堡城堡与皇家英里大道', summary: '在城堡中参观王冠珠宝与苏格兰加冕之地，随后由历史向导带您走过皇家英里大道，讲述小巷与教堂背后的真实历史，行程以利斯一家家族酒厂的威士忌品鉴收尾。' },
+    ],
     ticketTypes: [
       { code: 'EC-STANDARD', name: 'Castle entry only', basePriceCents: 2200, compareAtCents: 2700, costCents: 1400, taxBps: 2000, capacity: 70, netPriceCents: 1400 },
       { code: 'EC-COMBO', name: 'Castle + Royal Mile tour + whisky', basePriceCents: 6400, costCents: 4200, taxBps: 2000, inventoryMode: 'PER_SLOT', maxPerOrder: 8, capacity: 15, timeSlots: ['10:00', '14:00'], netPriceCents: 4200 },
@@ -1526,6 +1629,23 @@ export const PRODUCTS: SeedProduct[] = [
     ],
   },
 ];
+
+/**
+ * The merged catalogue: generated first, then hand-authored entries layered on
+ * top so a featured product replaces its generated counterpart.
+ *
+ * Deduplicated by slug via a Map — `PRODUCTS` is an array, so two records with
+ * the same slug would make the seed's `upsert` write the same row twice and the
+ * second (weaker) copy would win.
+ */
+export const PRODUCTS: SeedProduct[] = (() => {
+  const merged = new Map<string, SeedProduct>();
+
+  for (const product of buildGlobalProducts()) merged.set(product.slug, product);
+  for (const product of FEATURED_PRODUCTS) merged.set(product.slug, product);
+
+  return [...merged.values()];
+})();
 
 /** Promotional coupons seeded alongside the catalogue. */
 export const COUPONS = [

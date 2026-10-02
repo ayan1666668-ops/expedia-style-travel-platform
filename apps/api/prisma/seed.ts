@@ -1,13 +1,13 @@
 /**
  * ---------------------------------------------------------------------------
- * Voyahub seed script
+ * EasyTrip seed script
  * ---------------------------------------------------------------------------
  *
  * Idempotent and safe to re-run: every write is an upsert keyed on a stable
  * natural key (slug / code). Existing rows are updated in place so local
  * environments converge on the same state.
  *
- * Run with:  pnpm --filter @voyahub/api db:seed
+ * Run with:  pnpm --filter @easytrip/api db:seed
  */
 
 import {
@@ -181,6 +181,18 @@ async function main() {
         durationMinutes: definition.durationMinutes ?? null,
         minAge: definition.minAge ?? null,
         maxAge: definition.maxAge ?? null,
+        airlineName: definition.airlineName ?? null,
+        flightRoute: definition.flightRoute ?? null,
+        cabinClass: definition.cabinClass ?? null,
+        roomCategory: definition.roomCategory ?? null,
+        starCategory: definition.starCategory ?? null,
+        boardBasis: definition.boardBasis ?? null,
+        cruiseLine: definition.cruiseLine ?? null,
+        shipName: definition.shipName ?? null,
+        cruiseNights: definition.cruiseNights ?? null,
+        itineraryPorts: definition.itineraryPorts ?? [],
+        groupSizeCap: definition.groupSizeCap ?? null,
+        privateDeparture: definition.privateDeparture ?? false,
         publishedAt: new Date(),
       },
       update: {
@@ -191,6 +203,18 @@ async function main() {
         excludes: definition.excludes,
         merchantId,
         destinationId,
+        airlineName: definition.airlineName ?? null,
+        flightRoute: definition.flightRoute ?? null,
+        cabinClass: definition.cabinClass ?? null,
+        roomCategory: definition.roomCategory ?? null,
+        starCategory: definition.starCategory ?? null,
+        boardBasis: definition.boardBasis ?? null,
+        cruiseLine: definition.cruiseLine ?? null,
+        shipName: definition.shipName ?? null,
+        cruiseNights: definition.cruiseNights ?? null,
+        itineraryPorts: definition.itineraryPorts ?? [],
+        groupSizeCap: definition.groupSizeCap ?? null,
+        privateDeparture: definition.privateDeparture ?? false,
       },
     });
 
@@ -198,15 +222,24 @@ async function main() {
 
     // --- Translations ------------------------------------------------------
     await prisma.productTranslation.deleteMany({ where: { productId: product.id } });
+
+    // English is the fallback locale and must always exist. `definition.name`
+    // is the authored title; a humanised slug is only a last resort, because
+    // it produces things like "Top View Observation Deck" where the authored
+    // "Skyline Observation Deck at One World Trade Center" reads far better.
+    const englishName =
+      definition.name ??
+      definition.slug
+        .split('-')
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(' ');
+
     await prisma.productTranslation.createMany({
       data: [
         {
           productId: product.id,
           locale: 'en',
-          name: definition.slug
-            .split('-')
-            .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-            .join(' '),
+          name: englishName,
           summary: definition.summary,
           description: definition.description,
           highlights: definition.highlights,
@@ -222,12 +255,6 @@ async function main() {
           highlights: t.highlights ?? [],
         })),
       ],
-    });
-
-    // The default (en) title is nicer humanised than the slug.
-    await prisma.productTranslation.update({
-      where: { productId_locale: { productId: product.id, locale: 'en' } },
-      data: {},
     });
 
     // --- Media -------------------------------------------------------------
@@ -407,9 +434,9 @@ async function main() {
           rating: review.rating,
           title: review.title,
           body: review.body,
-          locale: 'en',
+          locale: review.locale ?? 'en',
           status: ReviewStatus.PUBLISHED,
-          helpfulCount: Math.floor(Math.random() * 24),
+          helpfulCount: review.helpfulCount ?? Math.floor(Math.random() * 24),
           visitedAt: new Date(Date.now() - review.daysAgo * 86_400_000),
           createdAt: new Date(Date.now() - review.daysAgo * 86_400_000),
         },
@@ -533,7 +560,7 @@ async function main() {
 // ---------------------------------------------------------------------------
 
 async function ensureCustomer() {
-  const email = 'traveler@voyahub.test';
+  const email = 'traveler@easytrip.test';
   return prisma.user.upsert({
     where: { email },
     create: {
@@ -553,12 +580,12 @@ async function ensureCustomer() {
 
 async function ensureStaff() {
   const staff = [
-    { email: 'admin@voyahub.test', role: UserRole.ADMIN, firstName: 'Ops', lastName: 'Admin' },
-    { email: 'operator@voyahub.test', role: UserRole.OPERATOR, firstName: 'Gate', lastName: 'Staff' },
-    { email: 'merchant@voyahub.test', role: UserRole.MERCHANT, firstName: 'Partner', lastName: 'Manager' },
+    { email: 'admin@easytrip.test', role: UserRole.ADMIN, firstName: 'Ops', lastName: 'Admin' },
+    { email: 'operator@easytrip.test', role: UserRole.OPERATOR, firstName: 'Gate', lastName: 'Staff' },
+    { email: 'merchant@easytrip.test', role: UserRole.MERCHANT, firstName: 'Partner', lastName: 'Manager' },
     // SUPPORT sits below ADMIN: able to fix a customer's record and issue a
     // goodwill refund, unable to touch pricing or simulate payments.
-    { email: 'support@voyahub.test', role: UserRole.SUPPORT, firstName: 'Casey', lastName: 'Support' },
+    { email: 'support@easytrip.test', role: UserRole.SUPPORT, firstName: 'Casey', lastName: 'Support' },
   ];
 
   for (const person of staff) {
@@ -577,7 +604,7 @@ async function ensureStaff() {
   }
 
   // Attach the merchant login to the first partner merchant.
-  const merchantUser = await prisma.user.findUnique({ where: { email: 'merchant@voyahub.test' } });
+  const merchantUser = await prisma.user.findUnique({ where: { email: 'merchant@easytrip.test' } });
   const partner = await prisma.merchant.findFirst({ where: { slug: 'big-apple-attractions' } });
   if (merchantUser && partner && !partner.ownerUserId) {
     await prisma.merchant.update({ where: { id: partner.id }, data: { ownerUserId: merchantUser.id } });
@@ -852,7 +879,7 @@ async function seedDemoOrders(): Promise<void> {
         status: NotificationStatus.SENT,
         template: 'order-confirmed',
         locale: 'en-US',
-        subject: `Your Voyahub order ${orderNumber}`,
+        subject: `Your EasyTrip order ${orderNumber}`,
         sentAt: new Date(placedAt.getTime() + 90_000),
       },
     });

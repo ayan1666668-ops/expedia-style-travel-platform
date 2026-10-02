@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * ---------------------------------------------------------------------------
- * Voyahub realtime end-to-end test
+ * EasyTrip realtime end-to-end test
  * ---------------------------------------------------------------------------
  *
  * Verifies the WebSocket gateway + notification centre against a running API:
@@ -104,7 +104,7 @@ const run = async () => {
   check('anonymous is granted only the public topic', JSON.stringify(anonHello.topics) === JSON.stringify(['public']));
 
   head('Authenticated socket');
-  const email = `realtime+${Date.now()}@voyahub.test`;
+  const email = `realtime+${Date.now()}@easytrip.test`;
   const registration = await api('/api/v1/auth/register', {
     method: 'POST',
     body: { email, password: 'Password123!', firstName: 'Realtime', lastName: 'Test' },

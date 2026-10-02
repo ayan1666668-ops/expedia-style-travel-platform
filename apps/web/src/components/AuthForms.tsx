@@ -10,10 +10,10 @@ import { createTranslator } from '@/lib/i18n/dictionaries';
 
 /** Email is the identity; the label is resolved per locale. */
 const DEMO_ACCOUNTS = [
-  { email: 'traveler@voyahub.test', key: 'auth.demoTraveller' },
-  { email: 'admin@voyahub.test', key: 'auth.demoAdmin' },
-  { email: 'operator@voyahub.test', key: 'auth.demoOperator' },
-  { email: 'merchant@voyahub.test', key: 'auth.demoMerchant' },
+  { email: 'traveler@easytrip.test', key: 'auth.demoTraveller' },
+  { email: 'admin@easytrip.test', key: 'auth.demoAdmin' },
+  { email: 'operator@easytrip.test', key: 'auth.demoOperator' },
+  { email: 'merchant@easytrip.test', key: 'auth.demoMerchant' },
 ] as const;
 
 function nextPath(raw: string | null): string {

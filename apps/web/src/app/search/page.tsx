@@ -12,7 +12,10 @@ import type { LocaleCode } from '@/lib/i18n/config';
 export async function generateMetadata(): Promise<Metadata> {
   const locale = await resolveServerLocale();
   const t = createTranslator(locale);
-  return { title: t('search.title'), description: t('search.metaDescription') };
+  return {
+    title: locale === 'zh' ? '搜索全球行程' : 'Search global journeys',
+    description: t('search.metaDescription'),
+  };
 }
 
 type SearchPageProps = {
@@ -162,7 +165,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
       sort: query.sort,
       page: grouped ? 1 : query.page,
       pageSize: grouped ? 12 : 20,
-    })
+    }, null, locale)
     .catch(() => null);
 
   if (!result) {
@@ -208,7 +211,6 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
           <p className="small muted" style={{ margin: 0 }}>
             {t('search.found', result.total)}
             {query.date && ` · ${query.date}`}
-            {result.tookMs !== undefined && ` · ${result.tookMs}ms`}
           </p>
         </div>
 

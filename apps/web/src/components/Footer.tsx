@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import type { LocaleCode } from '@/lib/i18n/config';
 import { createTranslator } from '@/lib/i18n/dictionaries';
+import { brandMark, brandName } from '@/lib/brand';
 
 /**
  * Customer-facing footer.
@@ -48,10 +49,10 @@ export function Footer({ locale }: { locale: LocaleCode }) {
           <div className="stack-sm">
             <div className="row" style={{ gap: 'var(--sp-2)' }}>
               <span className="logo-mark" aria-hidden>
-                V
+                {brandMark(locale)}
               </span>
               <span className="bold" style={{ fontSize: 17 }}>
-                Voyahub
+                {brandName(locale)}
               </span>
             </div>
             <p style={{ maxWidth: 340 }}>{t('footer.aboutText')}</p>
@@ -80,7 +81,7 @@ export function Footer({ locale }: { locale: LocaleCode }) {
 
         <div className="row-between wrap small subtle">
           <span>
-            © {new Date().getFullYear()} Voyahub. {t('footer.rights')}
+            © {new Date().getFullYear()} {brandName(locale)}. {t('footer.rights')}
           </span>
           <div className="row wrap" style={{ gap: 'var(--sp-4)' }}>
             <Link href="/search" className="small subtle">

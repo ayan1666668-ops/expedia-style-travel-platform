@@ -35,7 +35,7 @@ import { createSubscriberClient, getRedis, hasRealRedis } from '../../utils/redi
  *     platform already treats Redis (see `utils/redis.ts`).
  */
 
-export const REALTIME_CHANNEL = 'voyahub:realtime';
+export const REALTIME_CHANNEL = 'easytrip:realtime';
 
 /** Staff roles that are allowed to observe operational (cross-customer) events. */
 export const STAFF_ROLES = ['ADMIN', 'SUPPORT', 'OPERATOR', 'MERCHANT'] as const;

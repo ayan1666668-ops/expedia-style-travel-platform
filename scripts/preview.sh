@@ -46,7 +46,7 @@ wait_for() {
 }
 
 echo
-printf '\033[1mVoyahub — public preview\033[0m\n'
+printf '\033[1mEasyTrip — public preview\033[0m\n'
 printf 'codespace: %s\n\n' "$CS"
 
 wait_for "$WEB/" "web" || FAILED=1
@@ -83,10 +83,10 @@ cat <<MSG
   gate scanner   $WEB/admin/scan
 
 \033[1mAccounts\033[0m  (password: Password123!)
-  admin          admin@voyahub.test
-  support        support@voyahub.test
-  operator       operator@voyahub.test
-  traveler       traveler@voyahub.test
+  admin          admin@easytrip.test
+  support        support@easytrip.test
+  operator       operator@easytrip.test
+  traveler       traveler@easytrip.test
 
 \033[1mAPI\033[0m  (same origin, proxied by the storefront)
   health         $WEB/health

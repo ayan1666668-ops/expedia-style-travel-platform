@@ -15,7 +15,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
   const locale = await resolveServerLocale();
   const t = createTranslator(locale);
-  const collection = await api.collection(slug).catch(() => null);
+  const collection = await api.collection(slug, null, locale).catch(() => null);
   return {
     title: collection?.title ?? t('collections.fallbackTitle'),
     description: t('collections.description', slug),
@@ -32,7 +32,7 @@ export default async function CollectionPage({ params, searchParams }: Props) {
   const locale = await resolveServerLocale();
   const t = createTranslator(locale);
 
-  const collection = await api.collection(slug).catch(() => null);
+  const collection = await api.collection(slug, null, locale).catch(() => null);
   if (!collection) notFound();
 
   return (

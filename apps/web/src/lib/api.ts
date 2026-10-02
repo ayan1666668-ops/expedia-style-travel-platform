@@ -1,5 +1,5 @@
 /**
- * Typed client for the Voyahub API.
+ * Typed client for the EasyTrip API.
  *
  * Calls are made both server-side (React Server Components) and from the browser
  * after login, and the two want *different* URLs:
@@ -22,6 +22,8 @@ const API_BASE =
     : (process.env.NEXT_PUBLIC_API_BASE_URL ?? '');
 
 const API_PREFIX = '/api/v1';
+
+import { DEFAULT_LOCALE, type LocaleCode } from './i18n/config';
 
 export class ApiError extends Error {
   constructor(
@@ -103,6 +105,28 @@ export type SearchHit = {
   distanceKm: number | null;
   badge: string | null;
   tags: string[];
+  /**
+   * Category-specific facts from the API, so a card can show a flight's route
+   * and cabin, a hotel's stars and board basis, or a cruise's ship and length
+   * without a second request. Absent for categories that have no such fields.
+   */
+  category?: ProductCategoryInfo;
+};
+
+/** Mirrors the `category` block the search endpoint hydrates onto each hit. */
+export type ProductCategoryInfo = {
+  airlineName: string | null;
+  flightRoute: string | null;
+  cabinClass: string | null;
+  roomCategory: string | null;
+  starCategory: number | null;
+  boardBasis: string | null;
+  cruiseLine: string | null;
+  shipName: string | null;
+  cruiseNights: number | null;
+  itineraryPorts: string[];
+  groupSizeCap: number | null;
+  privateDeparture: boolean;
 };
 
 export type Facets = {
@@ -584,25 +608,43 @@ function toQuery(params: SearchParams): string {
   return query ? `?${query}` : '';
 }
 
+/**
+ * Every locale-sensitive endpoint goes through here.
+ *
+ * The API resolves translations from `?locale=`, and without it the server
+ * falls back to `en-US` — which is why a Chinese page could show an English
+ * `<title>`-adjacent rail heading ("Landmark access") while the surrounding
+ * copy was correctly Chinese. Injecting the locale at the client means no call
+ * site can forget it, and the UI's locale is already resolved per request by
+ * the server components.
+ */
+function withLocale<T extends SearchParams>(params: T, locale: LocaleCode): T & { locale: string } {
+  return { ...params, locale: locale === 'zh' ? 'zh-CN' : 'en-US' };
+}
+
 export const api = {
   health: () => fetch(`${API_BASE}/health`).then((r) => r.json()),
 
-  search: (params: SearchParams = {}, token?: string | null) =>
-    request<SearchResponse>(`/search${toQuery(params)}`, { token, revalidate: 30 }),
+  search: (params: SearchParams = {}, token?: string | null, locale: LocaleCode = DEFAULT_LOCALE) =>
+    request<SearchResponse>(`/search${toQuery(withLocale(params, locale))}`, { token, revalidate: 30 }),
 
   /** Category roll-up for the unified search panel (counts per product type). */
-  searchCategories: (params: SearchParams = {}) =>
-    request<{ categories: SearchCategory[]; total: number }>(`/search/categories${toQuery(params)}`, {
-      revalidate: 300,
-    }),
+  searchCategories: (params: SearchParams = {}, locale: LocaleCode = DEFAULT_LOCALE) =>
+    request<{ categories: SearchCategory[]; total: number }>(
+      `/search/categories${toQuery(withLocale(params, locale))}`,
+      { revalidate: 300 },
+    ),
 
   destinations: () => request<Destination[]>('/destinations', { revalidate: 3600 }),
 
-  collection: (slug: string, token?: string | null) =>
-    request<SearchResponse & { title: string }>(`/collections/${slug}`, { token, revalidate: 300 }),
+  collection: (slug: string, token?: string | null, locale: LocaleCode = DEFAULT_LOCALE) =>
+    request<SearchResponse & { title: string }>(`/collections/${slug}${toQuery(withLocale({}, locale))}`, {
+      token,
+      revalidate: 300,
+    }),
 
-  product: (slug: string, params: SearchParams = {}) =>
-    request<ProductDetail>(`/products/${slug}${toQuery(params)}`, { revalidate: 60 }),
+  product: (slug: string, params: SearchParams = {}, locale: LocaleCode = DEFAULT_LOCALE) =>
+    request<ProductDetail>(`/products/${slug}${toQuery(withLocale(params, locale))}`, { revalidate: 60 }),
 
   availability: (slug: string, days = 90) =>
     request<{ from: string; days: AvailabilityDay[] }>(`/products/${slug}/availability${toQuery({ days })}`, {

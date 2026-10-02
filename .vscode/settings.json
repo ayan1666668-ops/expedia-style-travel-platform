@@ -1,1 +1,21 @@
-{}
+{
+    "editor.experimental.preferTreeSitter.css": true,
+    "editor.experimental.preferTreeSitter.typescript": true,
+    "editor.experimental.treeSitterTelemetry": true,
+    "workbench.experimental.share.enabled": false,
+    "chat.mcp.assisted.nuget.enabled": true,
+    "github.copilot.chat.completionsFetcher": "electron-fetch",
+    "github.copilot.chat.exploreAgent.enabled": true,
+    "github.copilot.chat.nesFetcher": "electron-fetch",
+    "github.copilot.chat.switchAgent.enabled": true,
+    "python.analysis.supportDocstringTemplate": true,
+    "chat.defaultToCopilotHarness": true,
+    "chat.copilotHarnessIntroduction.mode": "off",
+    "chat.customizations.marketplace.enabled": true,
+    "chat.customizations.locationsMigration.enabled": true,
+    "chat.experimental.collectInstructionsInExtension": true,
+    "dictation.showButton": false,
+    "dictation.model": "nemotron-3.5-asr-streaming-0.6b",
+    "dictation.showTranscript": false,
+    "dictation.experimental.llmCleanup": false
+}

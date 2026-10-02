@@ -8,7 +8,7 @@ import { generateToken } from '../../utils/ids';
  * Payment gateway abstraction
  * ---------------------------------------------------------------------------
  *
- * Voyahub talks to a Hyperswitch-compatible payment router. Because merchant
+ * EasyTrip talks to a Hyperswitch-compatible payment router. Because merchant
  * integrations require external accounts, the platform ships two adapters:
  *
  *   - `mock`    deterministic, test-card driven; used by default and in CI.
@@ -218,7 +218,7 @@ class HyperswitchPaymentGateway implements PaymentGateway {
       currency: input.currency.toLowerCase(),
       capture_method: 'automatic',
       confirm: true,
-      description: `Voyahub order ${input.orderNumber}`,
+      description: `EasyTrip order ${input.orderNumber}`,
       metadata: { order_id: input.orderId, order_number: input.orderNumber },
       email: input.customerEmail,
       mandate: input.method === PaymentChannel.CARD ? 'off_session' : 'off_session',

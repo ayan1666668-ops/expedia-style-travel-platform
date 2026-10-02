@@ -56,9 +56,20 @@ export async function productRoutes(app: FastifyInstance): Promise<void> {
       throw AppError.notFound('Experience');
     }
 
+    /**
+     * Picks the translation for the requested locale.
+     *
+     * Matching is on the language *subtag*, not the full tag. The catalogue
+     * stores bare tags (`en`, `zh`) while `resolveLocale` returns regional ones
+     * (`en-US`, `zh-CN`); an exact-equality lookup would silently fall through
+     * to English and serve Chinese guests an English product page.
+     */
+    const language = locale.split('-')[0]!.toLowerCase();
     const translation =
-      product.translations.find((t) => t.locale === locale) ??
-      product.translations.find((t) => t.locale === product.defaultLocale) ??
+      product.translations.find((t) => t.locale.toLowerCase() === locale.toLowerCase()) ??
+      product.translations.find((t) => t.locale.split('-')[0]!.toLowerCase() === language) ??
+      product.translations.find((t) => t.locale.toLowerCase().startsWith('en')) ??
+      product.translations.find((t) => t.locale.toLowerCase() === product.defaultLocale.toLowerCase()) ??
       product.translations[0];
 
     const quantity = query.quantity ?? 1;
@@ -183,6 +194,27 @@ export async function productRoutes(app: FastifyInstance): Promise<void> {
         maxAge: product.maxAge,
       },
       merchant: product.merchant,
+      /**
+       * Category-specific display fields, mirroring what search ships on each
+       * hit. The detail page renders a different header per category (route and
+       * cabin for a flight, stars and board basis for a hotel, ship and length
+       * for a cruise), so these have to travel with the payload rather than
+       * being inferred from the type enum.
+       */
+      category: {
+        airlineName: product.airlineName,
+        flightRoute: product.flightRoute,
+        cabinClass: product.cabinClass,
+        roomCategory: product.roomCategory,
+        starCategory: product.starCategory,
+        boardBasis: product.boardBasis,
+        cruiseLine: product.cruiseLine,
+        shipName: product.shipName,
+        cruiseNights: product.cruiseNights,
+        itineraryPorts: product.itineraryPorts,
+        groupSizeCap: product.groupSizeCap,
+        privateDeparture: product.privateDeparture,
+      },
       rating: {
         average: product.ratingAvg,
         count: product.ratingCount,

@@ -60,14 +60,14 @@ export const config = {
     node: str('OPENSEARCH_NODE'),
     username: str('OPENSEARCH_USERNAME'),
     password: str('OPENSEARCH_PASSWORD'),
-    index: str('OPENSEARCH_INDEX', 'voyahub-products'),
+    index: str('OPENSEARCH_INDEX', 'easytrip-products'),
     enabled: Boolean(str('OPENSEARCH_NODE')),
   },
 
   storage: {
     endpoint: str('S3_ENDPOINT'),
     region: str('S3_REGION', 'us-east-1'),
-    bucket: str('S3_BUCKET', 'voyahub-tickets'),
+    bucket: str('S3_BUCKET', 'easytrip-tickets'),
     accessKeyId: str('S3_ACCESS_KEY_ID'),
     secretAccessKey: str('S3_SECRET_ACCESS_KEY'),
     forcePathStyle: str('S3_FORCE_PATH_STYLE', 'true') === 'true',

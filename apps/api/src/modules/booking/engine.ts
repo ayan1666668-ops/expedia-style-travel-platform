@@ -543,7 +543,7 @@ export async function confirmPaidOrder(orderId: string, providerChargeId?: strin
 
     // Queue confirmation notification.
     await tx.notification.create({
-      data: { userId: order.userId, orderId: order.id, channel: 'EMAIL', template: 'order-confirmed', locale: order.locale, subject: `Your Voyahub order ${order.orderNumber}` },
+      data: { userId: order.userId, orderId: order.id, channel: 'EMAIL', template: 'order-confirmed', locale: order.locale, subject: `Your EasyTrip booking ${order.orderNumber}` },
     });
   });
 

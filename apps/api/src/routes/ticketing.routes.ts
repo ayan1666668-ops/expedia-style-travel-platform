@@ -182,7 +182,7 @@ export async function ticketingRoutes(app: FastifyInstance): Promise<void> {
       .parse(request.body);
 
     const raw = body.code.trim();
-    const ticketNumber = raw.startsWith('VOYAHUB1.')
+    const ticketNumber = raw.startsWith('EASYTRIP1.')
       ? decodeQrPayload(raw).ticketNumber
       : raw.toUpperCase().replace(/^TKT-/, 'TKT-');
 
@@ -325,7 +325,7 @@ function requireRoleFromRequest(request: { user?: { id: string; role: string } }
 /** Extracts the ticket number from a signed QR payload. */
 function decodeQrPayload(payload: string): { ticketNumber: string } {
   try {
-    const body = payload.replace('VOYAHUB1.', '');
+    const body = payload.replace('EASYTRIP1.', '');
     const parsed = JSON.parse(Buffer.from(body, 'base64url').toString('utf8')) as { t?: string };
     return { ticketNumber: parsed.t ?? '' };
   } catch {

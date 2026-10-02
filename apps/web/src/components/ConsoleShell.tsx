@@ -8,6 +8,7 @@ import { readToken, clearSession } from '@/lib/session';
 import { LocaleSwitcher } from '@/components/LocaleSwitcher';
 import { createTranslator } from '@/lib/i18n/dictionaries';
 import type { LocaleCode } from '@/lib/i18n/config';
+import { brandMark, brandName } from '@/lib/brand';
 
 /**
  * Shared chrome for the two staff consoles.
@@ -100,7 +101,7 @@ export function ConsoleShell({
           {t('staff.staffOnlyHint')}
         </p>
         <Link href="/" className="btn btn-primary">
-          Voyahub
+          {brandName(locale)}
         </Link>
       </div>
     );
@@ -113,11 +114,11 @@ export function ConsoleShell({
       <aside className="console-nav">
         <div className="console-brand">
           <span className="logo-mark" aria-hidden>
-            V
+            {brandMark(locale)}
           </span>
           <div className="stack-sm" style={{ gap: 0 }}>
             <span className="bold" style={{ fontSize: 15 }}>
-              Voyahub
+              {brandName(locale)}
             </span>
             <span className="tiny" style={{ opacity: 0.65 }}>
               {surface === 'admin' ? t('staff.operations') : t('support.console')}
