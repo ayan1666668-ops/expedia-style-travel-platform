@@ -1,20 +1,24 @@
 import type { Metadata } from 'next';
 import { LoginForm } from '@/components/AuthForms';
+import { resolveServerLocale } from '@/lib/i18n/config';
+import { createTranslator } from '@/lib/i18n/dictionaries';
 
 export const metadata: Metadata = {
-  title: 'Sign in',
   robots: { index: false },
 };
 
-export default function LoginPage() {
+export default async function LoginPage() {
+  const locale = await resolveServerLocale();
+  const t = createTranslator(locale);
+
   return (
     <div className="container" style={{ paddingTop: 'var(--sp-7)', paddingBottom: 'var(--sp-7)' }}>
       <div style={{ maxWidth: 420, margin: '0 auto' }}>
-        <h1 style={{ marginBottom: 'var(--sp-2)' }}>Welcome back</h1>
+        <h1 style={{ marginBottom: 'var(--sp-2)' }}>{t('auth.signInTitle')}</h1>
         <p className="muted" style={{ marginBottom: 'var(--sp-5)' }}>
-          Sign in to see your bookings, e-tickets and rewards.
+          {t('auth.signInSubtitle')}
         </p>
-        <LoginForm />
+        <LoginForm locale={locale} />
       </div>
     </div>
   );

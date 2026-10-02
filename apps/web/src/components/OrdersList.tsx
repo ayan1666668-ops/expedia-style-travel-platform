@@ -5,15 +5,19 @@ import { useEffect, useState } from 'react';
 import { api, ApiError, type OrderSummary } from '@/lib/api';
 import { readToken } from '@/lib/session';
 import { formatDate, formatMoney, orderStatusLabel, orderStatusTone } from '@/lib/format';
+import type { LocaleCode } from '@/lib/i18n/config';
+import { createTranslator } from '@/lib/i18n/dictionaries';
 
+/** Filter values are API status codes; labels are resolved per locale. */
 const TABS = [
-  { value: '', label: 'All' },
-  { value: 'CONFIRMED', label: 'Upcoming' },
-  { value: 'COMPLETED', label: 'Completed' },
-  { value: 'CANCELLED', label: 'Cancelled' },
-];
+  { value: '', key: 'account.all' },
+  { value: 'CONFIRMED', key: 'account.upcoming' },
+  { value: 'COMPLETED', key: 'account.completed' },
+  { value: 'CANCELLED', key: 'account.cancelled' },
+] as const;
 
-export function OrdersList() {
+export function OrdersList({ locale }: { locale: LocaleCode }) {
+  const t = createTranslator(locale);
   const [orders, setOrders] = useState<OrderSummary[]>([]);
   const [status, setStatus] = useState('');
   const [loading, setLoading] = useState(true);
@@ -23,7 +27,7 @@ export function OrdersList() {
     const token = readToken();
     if (!token) {
       setLoading(false);
-      setError('Sign in to see your bookings.');
+      setError(t('account.signInToView'));
       return;
     }
 
@@ -32,7 +36,11 @@ export function OrdersList() {
       .orders(status ? { status } : {}, token)
       .then((result) => setOrders(result.items))
       .catch((caught) =>
-        setError(caught instanceof ApiError && caught.status === 401 ? 'Your session expired — sign in again.' : 'Could not load your bookings.'),
+        setError(
+          caught instanceof ApiError && caught.status === 401
+            ? t('common_errors.sessionExpired')
+            : t('account.couldNotLoad'),
+        ),
       )
       .finally(() => setLoading(false));
   }, [status]);
@@ -52,7 +60,7 @@ export function OrdersList() {
       <div className="card card-pad center stack">
         <p className="muted">{error}</p>
         <Link href="/login" className="btn btn-primary">
-          Sign in
+          {t('common.signIn')}
         </Link>
       </div>
     );
@@ -64,12 +72,12 @@ export function OrdersList() {
         <div style={{ fontSize: 40 }} aria-hidden>
           🧳
         </div>
-        <h3>No bookings yet</h3>
+        <h3>{t('account.noBookings')}</h3>
         <p className="muted" style={{ maxWidth: 380 }}>
-          When you book an experience it will show up here with your e-tickets and cancellation options.
+          {t('account.noBookingsHint')}
         </p>
         <Link href="/search" className="btn btn-primary">
-          Browse experiences
+          {t('account.browse')}
         </Link>
       </div>
     );
@@ -84,7 +92,7 @@ export function OrdersList() {
             className={`tab ${status === tab.value ? 'active' : ''}`}
             onClick={() => setStatus(tab.value)}
           >
-            {tab.label}
+            {t(tab.key)}
           </button>
         ))}
       </div>
@@ -95,10 +103,12 @@ export function OrdersList() {
             <div>
               <div className="row" style={{ gap: 'var(--sp-2)' }}>
                 <span className="bold mono">{order.orderNumber}</span>
-                <span className={`badge badge-${orderStatusTone(order.status)}`}>{orderStatusLabel(order.status)}</span>
+                <span className={`badge badge-${orderStatusTone(order.status)}`}>
+                  {orderStatusLabel(order.status, locale)}
+                </span>
               </div>
               <div className="tiny subtle" style={{ marginTop: 2 }}>
-                Booked {formatDate(order.placedAt)}
+                {t('account.bookedOn')} {formatDate(order.placedAt, locale)}
               </div>
             </div>
             <div className="right">
@@ -106,7 +116,7 @@ export function OrdersList() {
                 {formatMoney(order.totalCents, order.currency)}
               </div>
               <div className="tiny subtle">
-                {order.ticketCount} ticket{order.ticketCount === 1 ? '' : 's'}
+                {order.ticketCount} {order.ticketCount === 1 ? t('common.guest') : t('account.tickets')}
               </div>
             </div>
           </div>
@@ -124,9 +134,9 @@ export function OrdersList() {
                 <div className="grow" style={{ minWidth: 0 }}>
                   <div className="small bold truncate">{item.productName}</div>
                   <div className="tiny subtle">
-                    {formatDate(item.serviceDate)}
-                    {item.timeSlot ? ` · ${item.timeSlot}` : ''} · {item.quantity} guest
-                    {item.quantity === 1 ? '' : 's'}
+                    {formatDate(item.serviceDate, locale)}
+                    {item.timeSlot ? ` · ${item.timeSlot}` : ''} · {item.quantity}{' '}
+                    {item.quantity === 1 ? t('common.guest') : t('common.guests')}
                   </div>
                 </div>
               </div>

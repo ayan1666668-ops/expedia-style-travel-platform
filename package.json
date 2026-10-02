@@ -21,7 +21,10 @@
     "infra:up": "docker compose up -d",
     "infra:down": "docker compose down",
     "setup": "pnpm install && pnpm db:generate && pnpm db:push && pnpm db:seed",
-    "smoke": "bash scripts/smoke-test.sh"
+    "smoke": "bash scripts/smoke-test.sh",
+    "test:realtime": "node scripts/realtime-test.mjs",
+    "check:mobile": "bash scripts/mobile-check.sh",
+    "verify": "pnpm typecheck && pnpm smoke && pnpm test:realtime && pnpm check:mobile"
   },
   "devDependencies": {
     "typescript": "^5.6.3"

@@ -5,17 +5,24 @@ import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { readToken } from '@/lib/session';
 import { formatMoney } from '@/lib/format';
+import type { LocaleCode } from '@/lib/i18n/config';
+import { createTranslator } from '@/lib/i18n/dictionaries';
 
 type Program = Awaited<ReturnType<typeof api.loyaltyProgram>> | null;
 
-const TIER_STYLES: Record<string, { gradient: string; label: string }> = {
-  SILVER: { gradient: 'linear-gradient(135deg, #6b7280, #9ca3af)', label: 'Silver' },
-  GOLD: { gradient: 'linear-gradient(135deg, #b45309, #f59e0b)', label: 'Gold' },
-  PLATINUM: { gradient: 'linear-gradient(135deg, #4c1d95, #8b5cf6)', label: 'Platinum' },
-  BLUE: { gradient: 'linear-gradient(135deg, #1e40af, #3b82f6)', label: 'Explorer' },
+/**
+ * Keyed by the API's `LoyaltyTier` enum. `MEMBER` is the entry tier; the other
+ * names are the ones customers see.
+ */
+const TIER_STYLES: Record<string, { gradient: string; labelKey: string }> = {
+  MEMBER: { gradient: 'linear-gradient(135deg, #1e40af, #3b82f6)', labelKey: 'loyalty.tierExplorer' },
+  SILVER: { gradient: 'linear-gradient(135deg, #6b7280, #9ca3af)', labelKey: 'loyalty.tierSilver' },
+  GOLD: { gradient: 'linear-gradient(135deg, #b45309, #f59e0b)', labelKey: 'loyalty.tierGold' },
+  PLATINUM: { gradient: 'linear-gradient(135deg, #4c1d95, #8b5cf6)', labelKey: 'loyalty.tierPlatinum' },
 };
 
-export function LoyaltyDashboard({ program }: { program: Program }) {
+export function LoyaltyDashboard({ program, locale }: { program: Program; locale: LocaleCode }) {
+  const t = createTranslator(locale);
   const [account, setAccount] = useState<Awaited<ReturnType<typeof api.loyaltyAccount>> | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -32,14 +39,14 @@ export function LoyaltyDashboard({ program }: { program: Program }) {
       .finally(() => setLoading(false));
   }, []);
 
-  const tierStyle = TIER_STYLES[account?.tier ?? 'BLUE'] ?? TIER_STYLES.BLUE;
+  const tierStyle = TIER_STYLES[account?.tier ?? 'MEMBER'] ?? TIER_STYLES.MEMBER;
 
   return (
     <div className="stack-lg">
       <header>
-        <h1 style={{ marginBottom: 'var(--sp-2)' }}>Voyahub Rewards</h1>
+        <h1 style={{ marginBottom: 'var(--sp-2)' }}>{t('loyalty.title')}</h1>
         <p className="muted" style={{ maxWidth: 640 }}>
-          Every booking earns points, every point is worth money back. No expiry while you stay active.
+          {t('loyalty.dashboardSubtitle')}
         </p>
       </header>
 
@@ -53,23 +60,27 @@ export function LoyaltyDashboard({ program }: { program: Program }) {
           <div className="row-between wrap">
             <div>
               <div className="tiny" style={{ opacity: 0.85 }}>
-                {tierStyle.label} member
+                {t(tierStyle.labelKey)} {t('loyalty.member')}
               </div>
               <div style={{ fontSize: 34, fontWeight: 800, letterSpacing: -0.5 }}>
                 {account.points.toLocaleString()}
                 <span className="tiny" style={{ marginLeft: 8, opacity: 0.85 }}>
-                  pts
+                  {t('loyalty.points')}
                 </span>
               </div>
               <div className="small" style={{ opacity: 0.9 }}>
-                Worth {formatMoney(account.balanceValueCents, 'USD')} in rewards
+                {t('loyalty.worth', formatMoney(account.balanceValueCents, 'USD'))}
               </div>
             </div>
 
             {account.nextTier && (
-              <div style={{ minWidth: 240 }}>
+              <div className="tier-progress">
                 <div className="tiny" style={{ opacity: 0.85, marginBottom: 6 }}>
-                  {account.nextTier.pointsNeeded.toLocaleString()} pts to {account.nextTier.tier}
+                  {t(
+                    'loyalty.toTier',
+                    account.nextTier.pointsNeeded.toLocaleString(),
+                    t(TIER_STYLES[account.nextTier.tier]?.labelKey ?? 'loyalty.tierPlatinum'),
+                  )}
                 </div>
                 <div
                   style={{
@@ -94,13 +105,13 @@ export function LoyaltyDashboard({ program }: { program: Program }) {
       ) : (
         <section className="card card-pad row-between wrap">
           <div>
-            <h3 style={{ marginBottom: 4 }}>Sign in to see your points</h3>
+            <h3 style={{ marginBottom: 4 }}>{t('loyalty.signInToSee')}</h3>
             <p className="small muted" style={{ margin: 0 }}>
-              We&rsquo;ll tally your balance, tier and progress to the next one.
+              {t('loyalty.signInHint')}
             </p>
           </div>
           <Link href="/login?next=/loyalty" className="btn btn-primary">
-            Sign in
+            {t('common.signIn')}
           </Link>
         </section>
       )}
@@ -110,14 +121,16 @@ export function LoyaltyDashboard({ program }: { program: Program }) {
       {/* ------------------------------------------------------------------ */}
       {program && (
         <section className="stack">
-          <h2 style={{ fontSize: 20 }}>Tiers &amp; perks</h2>
+          <h2 style={{ fontSize: 20 }}>{t('loyalty.tiersAndPerks')}</h2>
           <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
             {program.tiers.map((tier) => (
               <article key={tier.tier} className="card card-pad stack-sm">
                 <div className="row-between">
-                  <h3 style={{ fontSize: 16, margin: 0 }}>{tier.tier}</h3>
+                  <h3 style={{ fontSize: 16, margin: 0 }}>
+                    {t(TIER_STYLES[tier.tier]?.labelKey ?? 'loyalty.tierExplorer')}
+                  </h3>
                   <span className="badge badge-neutral">
-                    {tier.threshold.toLocaleString()}+ pts
+                    {t('loyalty.pointsThreshold', tier.threshold.toLocaleString())}
                   </span>
                 </div>
                 <ul className="stack-sm small" style={{ margin: 0, paddingLeft: 'var(--sp-4)' }}>
@@ -133,10 +146,10 @@ export function LoyaltyDashboard({ program }: { program: Program }) {
 
           <div className="trust-bar">
             <div>
-              <strong>Earn</strong> {program.earnRate}
+              <strong>{t('loyalty.earn')}</strong> {program.earnRate}
             </div>
             <div>
-              <strong>Redeem</strong> {program.redeemRate}
+              <strong>{t('loyalty.redeem')}</strong> {program.redeemRate}
             </div>
           </div>
         </section>

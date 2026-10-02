@@ -4,6 +4,8 @@ import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import type { ProductDetail } from '@/lib/api';
 import { formatDate, formatMoney, relativeDay } from '@/lib/format';
+import type { LocaleCode } from '@/lib/i18n/config';
+import { createTranslator } from '@/lib/i18n/dictionaries';
 
 /**
  * The sticky booking panel. Everything a shopper needs to commit is here:
@@ -17,13 +19,16 @@ export function BookingPanel({
   selectedDate,
   quantity: initialQuantity,
   lowestPrice,
+  locale,
 }: {
   product: ProductDetail;
   selectedDate: string;
   quantity: number;
   lowestPrice: number | null;
+  locale: LocaleCode;
 }) {
   const router = useRouter();
+  const t = createTranslator(locale);
 
   const [ticketTypeId, setTicketTypeId] = useState(product.ticketTypes[0]?.id ?? '');
   const [quantity, setQuantity] = useState(Math.min(Math.max(1, initialQuantity), product.ticketTypes[0]?.maxPerOrder ?? 1));
@@ -46,7 +51,7 @@ export function BookingPanel({
   if (!selected || !priced) {
     return (
       <aside className="booking-panel">
-        <p className="muted">This experience is not currently bookable online.</p>
+        <p className="muted">{t('product.notBookable')}</p>
       </aside>
     );
   }
@@ -86,9 +91,11 @@ export function BookingPanel({
       {/* Price anchor */}
       <div>
         <div className="row wrap" style={{ gap: 'var(--sp-2)', marginBottom: 4 }}>
-          {offPercent && <span className="badge badge-accent">-{offPercent}% today</span>}
+          {offPercent && (
+            <span className="badge badge-accent">{t('product.offToday', offPercent)}</span>
+          )}
           {lowestPrice !== null && lowestPrice < selected.totalPerUnitCents && (
-            <span className="badge badge-positive">Lowest price</span>
+            <span className="badge badge-positive">{t('product.lowestPrice')}</span>
           )}
         </div>
         <div className="row" style={{ alignItems: 'baseline', gap: 'var(--sp-2)' }}>
@@ -99,13 +106,13 @@ export function BookingPanel({
             <span className="price-was">{formatMoney(selected.compareAtPriceCents, selected.currency)}</span>
           )}
         </div>
-        <div className="tiny subtle">per person, taxes &amp; fees included</div>
+        <div className="tiny subtle">{t('product.perPersonInclTax')}</div>
       </div>
 
       {/* Date summary */}
       <div className="panel stack-sm" style={{ padding: 'var(--sp-3)' }}>
         <div className="row-between">
-          <span className="small muted">Date</span>
+          <span className="small muted">{t('product.dateLabel')}</span>
           <a
             href={`/products/${product.slug}?quantity=${quantity}`}
             className="small bold"
@@ -116,7 +123,7 @@ export function BookingPanel({
         </div>
         {product.destination && (
           <div className="row-between">
-            <span className="small muted">Location</span>
+            <span className="small muted">{t('product.locationLabel')}</span>
             <span className="small bold">{product.destination.name}</span>
           </div>
         )}
@@ -124,7 +131,7 @@ export function BookingPanel({
 
       {/* Options */}
       <div className="stack-sm">
-        <span className="label">Choose an option</span>
+        <span className="label">{t('product.chooseOption')}</span>
         {product.ticketTypes.map((ticketType) => (
           <label
             key={ticketType.id}
@@ -150,13 +157,13 @@ export function BookingPanel({
               {ticketType.description && <div className="tiny subtle">{ticketType.description}</div>}
               {ticketType.discountCents > 0 && (
                 <div className="tiny" style={{ color: 'var(--success-600)', fontWeight: 600 }}>
-                  Save {formatMoney(ticketType.discountCents, ticketType.currency)} with this option
+                  {t('product.saveWithOption', formatMoney(ticketType.discountCents, ticketType.currency))}
                 </div>
               )}
             </div>
             <div className="right nowrap">
               <div className="bold small">{formatMoney(ticketType.totalPerUnitCents, ticketType.currency)}</div>
-              <div className="tiny subtle">per person</div>
+              <div className="tiny subtle">{t('common.perPerson')}</div>
             </div>
           </label>
         ))}
@@ -165,7 +172,9 @@ export function BookingPanel({
       {/* Quantity */}
       <div className="row-between">
         <span className="label">
-          {selected.minPerOrder > 1 ? `Guests (min ${selected.minPerOrder})` : 'Guests'}
+          {selected.minPerOrder > 1
+            ? t('product.guestsMin', selected.minPerOrder)
+            : t('product.guestsLabel')}
         </span>
         <div className="qty-control">
           <button
@@ -175,7 +184,7 @@ export function BookingPanel({
               updateUrl(selected.id, Math.max(selected.minPerOrder, quantity - 1));
             }}
             disabled={quantity <= selected.minPerOrder}
-            aria-label="Decrease quantity"
+            aria-label={t('product.decreaseQty')}
           >
             −
           </button>
@@ -187,7 +196,7 @@ export function BookingPanel({
               updateUrl(selected.id, Math.min(maxQty, quantity + 1));
             }}
             disabled={quantity >= maxQty}
-            aria-label="Increase quantity"
+            aria-label={t('product.increaseQty')}
           >
             +
           </button>
@@ -197,12 +206,12 @@ export function BookingPanel({
       {/* Discount codes applied at checkout */}
       <div className="field">
         <label htmlFor="coupon" className="label">
-          Promo code
+          {t('product.promoCode')}
         </label>
         <input
           id="coupon"
           className="input"
-          placeholder="Have a code? Try WELCOME10"
+          placeholder={t('product.haveACode')}
           value={coupon}
           onChange={(event) => setCoupon(event.target.value)}
         />
@@ -219,7 +228,7 @@ export function BookingPanel({
         {priced.discountTotal > 0 && (
           <div className="price-row">
             <span className="label" style={{ color: 'var(--success-600)' }}>
-              Promotion savings
+              {t('product.promotionSavings')}
             </span>
             <span style={{ color: 'var(--success-600)', fontWeight: 600 }}>
               −{formatMoney(priced.discountTotal, selected.currency)}
@@ -227,24 +236,23 @@ export function BookingPanel({
           </div>
         )}
         <div className="price-row total">
-          <span>Total</span>
+          <span>{t('product.total')}</span>
           <span>{formatMoney(priced.lineTotal, selected.currency)}</span>
         </div>
       </div>
 
       <button className="btn btn-accent btn-lg btn-block" onClick={checkout} disabled={submitting}>
-        {submitting ? 'Preparing checkout…' : 'Reserve & continue to payment'}
+        {submitting ? t('product.preparingCheckout') : t('product.reserveAndPay')}
       </button>
 
       <p className="tiny subtle center">
-        You won&rsquo;t be charged yet. Free cancellation up to{' '}
-        {product.cancellationPolicy?.freeCancelHours ?? 24} hours before.
+        {t('product.notChargedYet', product.cancellationPolicy?.freeCancelHours ?? 24)}
       </p>
 
       {/* Applied pricing rules — transparency about why the price moved */}
       {selected.appliedRules.length > 0 && (
         <div className="stack-sm">
-          <span className="label">Price adjustments applied</span>
+          <span className="label">{t('product.priceAdjustments')}</span>
           {selected.appliedRules.map((rule) => (
             <div key={rule.ruleId} className="row-between tiny">
               <span className="muted truncate">{rule.name}</span>

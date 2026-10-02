@@ -1,37 +1,46 @@
 import Link from 'next/link';
+import type { LocaleCode } from '@/lib/i18n/config';
+import { createTranslator } from '@/lib/i18n/dictionaries';
 
-const LINKS = [
-  {
-    title: 'Explore',
-    items: [
-      { label: 'All experiences', href: '/search' },
-      { label: 'Trending now', href: '/collections/trending' },
-      { label: 'Skip the line', href: '/collections/skip-the-line' },
-      { label: 'Free cancellation', href: '/collections/free-cancellation' },
-      { label: 'Destinations', href: '/search' },
-    ],
-  },
-  {
-    title: 'Your trips',
-    items: [
-      { label: 'My orders', href: '/orders' },
-      { label: 'My tickets', href: '/tickets' },
-      { label: 'Wishlist', href: '/wishlist' },
-      { label: 'Loyalty programme', href: '/loyalty' },
-    ],
-  },
-  {
-    title: 'Partners',
-    items: [
-      { label: 'Operator console', href: '/admin' },
-      { label: 'Gate scanner', href: '/admin/scan' },
-      { label: 'Finance ledger', href: '/admin/finance' },
-      { label: 'Sign in', href: '/login' },
-    ],
-  },
-];
+/**
+ * Customer-facing footer.
+ *
+ * No staff links. Staff reach their consoles from the account menu, which is
+ * role-gated — a public footer is the one place where an operations link is
+ * guaranteed to be seen by every visitor, customers included.
+ */
 
-export function Footer() {
+const GROUPS = [
+  {
+    titleKey: 'nav.experiences' as const,
+    items: [
+      { key: 'nav.experiences' as const, href: '/search' },
+      { key: 'nav.trending' as const, href: '/collections/trending' },
+      { key: 'home.skipTheLine' as const, href: '/collections/skip-the-line' },
+      { key: 'nav.freeCancellation' as const, href: '/collections/free-cancellation' },
+    ],
+  },
+  {
+    titleKey: 'account.myBookings' as const,
+    items: [
+      { key: 'nav.myOrders' as const, href: '/orders' },
+      { key: 'nav.myTickets' as const, href: '/tickets' },
+      { key: 'nav.rewards' as const, href: '/loyalty' },
+    ],
+  },
+  {
+    titleKey: 'footer.support' as const,
+    items: [
+      { key: 'footer.helpCentre' as const, href: '/search' },
+      { key: 'footer.cancellations' as const, href: '/orders' },
+      { key: 'footer.contact' as const, href: '/login' },
+    ],
+  },
+] as const;
+
+export function Footer({ locale }: { locale: LocaleCode }) {
+  const t = createTranslator(locale);
+
   return (
     <footer className="footer">
       <div className="container">
@@ -45,23 +54,22 @@ export function Footer() {
                 Voyahub
               </span>
             </div>
-            <p style={{ maxWidth: 340 }}>
-              Skip-the-line tickets, guided tours and day trips across Europe and North America. Book direct,
-              pay securely and get your e-ticket instantly.
-            </p>
+            <p style={{ maxWidth: 340 }}>{t('footer.aboutText')}</p>
             <p className="tiny subtle">
-              Demo platform. Payments run against a built-in mock gateway — no real charges are made.
+              {locale === 'zh'
+                ? '演示环境：支付走内置模拟网关，不会产生真实扣款。'
+                : 'Demo platform. Payments run against a built-in mock gateway — no real charges are made.'}
             </p>
           </div>
 
-          {LINKS.map((group) => (
-            <div key={group.title} className="stack-sm">
+          {GROUPS.map((group) => (
+            <div key={group.titleKey} className="stack-sm">
               <h4 style={{ fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                {group.title}
+                {t(group.titleKey)}
               </h4>
               {group.items.map((item) => (
-                <Link key={item.label} href={item.href} className="small">
-                  {item.label}
+                <Link key={item.href + item.key} href={item.href} className="small">
+                  {t(item.key)}
                 </Link>
               ))}
             </div>
@@ -71,12 +79,17 @@ export function Footer() {
         <hr className="divider" />
 
         <div className="row-between wrap small subtle">
-          <span>© {new Date().getFullYear()} Voyahub. All rights reserved.</span>
+          <span>
+            © {new Date().getFullYear()} Voyahub. {t('footer.rights')}
+          </span>
           <div className="row wrap" style={{ gap: 'var(--sp-4)' }}>
-            <span>Privacy</span>
-            <span>Terms</span>
-            <span>Cookie settings</span>
-            <span>Prices include taxes &amp; fees</span>
+            <Link href="/search" className="small subtle">
+              {t('footer.privacy')}
+            </Link>
+            <Link href="/search" className="small subtle">
+              {t('footer.terms')}
+            </Link>
+            <span>{t('nav.priceNotice')}</span>
           </div>
         </div>
       </div>

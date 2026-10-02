@@ -3,21 +3,26 @@
 import { useState } from 'react';
 import type { ProductDetail } from '@/lib/api';
 import { formatDate, relativeDay, stars } from '@/lib/format';
+import type { LocaleCode } from '@/lib/i18n/config';
+import { createTranslator } from '@/lib/i18n/dictionaries';
 
 type Props = {
   slug: string;
   reviews: ProductDetail['reviews'];
   rating: ProductDetail['rating'];
+  locale: LocaleCode;
 };
 
+/** Sort values are stable; labels are resolved per locale at render time. */
 const SORTS = [
-  { value: 'RECENT', label: 'Most recent' },
-  { value: 'MOST_HELPFUL', label: 'Most helpful' },
-  { value: 'HIGHEST', label: 'Highest rated' },
-  { value: 'LOWEST', label: 'Lowest rated' },
-];
+  { value: 'RECENT', key: 'product.sortRecent' },
+  { value: 'MOST_HELPFUL', key: 'product.sortMostHelpful' },
+  { value: 'HIGHEST', key: 'product.sortHighest' },
+  { value: 'LOWEST', key: 'product.sortLowest' },
+] as const;
 
-export function ReviewSection({ slug, reviews, rating }: Props) {
+export function ReviewSection({ slug, reviews, rating, locale }: Props) {
+  const t = createTranslator(locale);
   const [sort, setSort] = useState('RECENT');
   const [expanded, setExpanded] = useState(false);
 
@@ -26,17 +31,17 @@ export function ReviewSection({ slug, reviews, rating }: Props) {
   return (
     <section className="card card-pad stack">
       <div className="row-between wrap">
-        <h2 style={{ fontSize: 18 }}>Traveller reviews</h2>
+        <h2 style={{ fontSize: 18 }}>{t('product.travellerReviews')}</h2>
         <select
           className="select"
           value={sort}
           onChange={(event) => setSort(event.target.value)}
           style={{ width: 'auto' }}
-          aria-label="Sort reviews"
+          aria-label={t('product.sortReviewsAria')}
         >
           {SORTS.map((option) => (
             <option key={option.value} value={option.value}>
-              {option.label}
+              {t(option.key)}
             </option>
           ))}
         </select>
@@ -44,7 +49,7 @@ export function ReviewSection({ slug, reviews, rating }: Props) {
 
       {rating.count === 0 ? (
         <p className="muted small" style={{ margin: 0 }}>
-          No reviews yet. Be the first to share your experience after your visit.
+          {t('product.noReviewsBlurb')}
         </p>
       ) : (
         <>
@@ -58,18 +63,18 @@ export function ReviewSection({ slug, reviews, rating }: Props) {
                 {stars(rating.average)}
               </div>
               <div className="tiny subtle" style={{ marginTop: 4 }}>
-                {rating.count.toLocaleString()} reviews
+                {t('product.reviewsCount', rating.count)}
               </div>
             </div>
 
-            <div className="grow stack-sm" style={{ minWidth: 220 }}>
+            <div className="grow stack-sm" style={{ minWidth: 0 }}>
               {rating.breakdown
                 .slice()
                 .reverse()
                 .map((row) => (
                   <div key={row.stars} className="row" style={{ gap: 'var(--sp-2)' }}>
                     <span className="tiny muted nowrap" style={{ width: 40 }}>
-                      {row.stars} star
+                      {t('product.starLabel', row.stars)}
                     </span>
                     <div
                       style={{
@@ -122,10 +127,12 @@ export function ReviewSection({ slug, reviews, rating }: Props) {
                     </span>
                     <div>
                       <div className="row" style={{ gap: 'var(--sp-2)' }}>
-                        <span className="small bold">{review.author?.name ?? 'Voyahub traveller'}</span>
+                        <span className="small bold">
+                          {review.author?.name ?? t('product.travellerFallback')}
+                        </span>
                         {review.verified && (
                           <span className="badge badge-positive" style={{ fontSize: 10.5 }}>
-                            ✓ Verified booking
+                            {t('product.verifiedBooking')}
                           </span>
                         )}
                       </div>
@@ -148,7 +155,7 @@ export function ReviewSection({ slug, reviews, rating }: Props) {
                     style={{ borderLeft: '3px solid var(--brand-500)', padding: 'var(--sp-3)' }}
                   >
                     <div className="tiny bold" style={{ color: 'var(--brand-700)' }}>
-                      Response from the operator
+                      {t('product.operatorResponse')}
                     </div>
                     <div className="muted" style={{ marginTop: 4 }}>
                       {review.merchantReply}
@@ -171,9 +178,9 @@ export function ReviewSection({ slug, reviews, rating }: Props) {
                 )}
 
                 <span className="tiny subtle">
-                  {review.helpfulCount > 0 && `${review.helpfulCount} found this helpful · `}
+                  {review.helpfulCount > 0 && `${t('product.foundHelpful', review.helpfulCount)} · `}
                   <a href={`/products/${slug}#reviews`} style={{ color: 'var(--brand-600)' }}>
-                    Report
+                    {t('product.report')}
                   </a>
                 </span>
               </article>
@@ -182,12 +189,12 @@ export function ReviewSection({ slug, reviews, rating }: Props) {
 
           {reviews.length > 4 && (
             <button className="btn btn-secondary" onClick={() => setExpanded((v) => !v)}>
-              {expanded ? 'Show fewer reviews' : `Show all ${reviews.length} reviews`}
+              {expanded ? t('product.showFewer') : t('product.showAllReviews', reviews.length)}
             </button>
           )}
 
           <p className="tiny subtle" style={{ margin: 0 }}>
-            Reviews are only accepted from travellers who completed a booking on Voyahub.
+            {t('product.reviewsPolicy')}
           </p>
         </>
       )}

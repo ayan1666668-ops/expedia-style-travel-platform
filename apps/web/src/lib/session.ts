@@ -12,6 +12,37 @@ const TOKEN_KEY = 'voyahub_token';
 const USER_KEY = 'voyahub_user';
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 30; // 30 days, matches a typical refresh window
 
+type SessionListener = () => void;
+const sessionListeners = new Set<SessionListener>();
+
+/**
+ * Notifies in-tab subscribers when the session changes.
+ *
+ * The realtime connection has to be re-established with the new token on login
+ * and dropped on logout, and doing that from a route effect would miss the
+ * cases where only localStorage changed.
+ */
+export function onSessionChange(listener: SessionListener): () => void {
+  if (typeof window === 'undefined') return () => undefined;
+
+  sessionListeners.add(listener);
+  // `storage` fires in *other* tabs, so a logout in one tab closes the socket
+  // in the others too.
+  const onStorage = (event: StorageEvent) => {
+    if (event.key === TOKEN_KEY || event.key === null) listener();
+  };
+  window.addEventListener('storage', onStorage);
+
+  return () => {
+    sessionListeners.delete(listener);
+    window.removeEventListener('storage', onStorage);
+  };
+}
+
+function notifySessionChange(): void {
+  for (const listener of sessionListeners) listener();
+}
+
 export function readToken(): string | null {
   if (typeof window === 'undefined') return null;
   return window.localStorage.getItem(TOKEN_KEY);
@@ -35,10 +66,12 @@ export function saveSession(token: string, user: unknown): void {
   // marked SameSite=Lax so it rides along on top-level navigations but never
   // on cross-site subrequests.
   document.cookie = `${TOKEN_KEY}=${encodeURIComponent(token)}; path=/; max-age=${COOKIE_MAX_AGE}; SameSite=Lax`;
+  notifySessionChange();
 }
 
 export function clearSession(): void {
   window.localStorage.removeItem(TOKEN_KEY);
   window.localStorage.removeItem(USER_KEY);
   document.cookie = `${TOKEN_KEY}=; path=/; max-age=0; SameSite=Lax`;
+  notifySessionChange();
 }

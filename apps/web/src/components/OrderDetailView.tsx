@@ -2,21 +2,27 @@
 
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { api, ApiError, mediaUrl, type CancellationQuote, type OrderDetail } from '@/lib/api';
+import { useRealtime, useRealtimeEvent } from '@/components/RealtimeProvider';
 import { readToken } from '@/lib/session';
 import { formatDate, formatDateTime, formatMoney, orderStatusLabel, orderStatusTone, relativeDay } from '@/lib/format';
+import type { LocaleCode } from '@/lib/i18n/config';
+import { createTranslator } from '@/lib/i18n/dictionaries';
 
 export function OrderDetailView({
   orderId,
   initial,
   initialQuote = null,
+  locale,
 }: {
   orderId: string;
   /** Server-fetched order, when a valid session cookie was present. */
   initial?: OrderDetail | null;
   initialQuote?: CancellationQuote | null;
+  locale: LocaleCode;
 }) {
+  const t = createTranslator(locale);
   const params = useSearchParams();
   const isNew = params.get('new') === '1';
 
@@ -25,6 +31,49 @@ export function OrderDetailView({
   const [loading, setLoading] = useState(initial == null);
   const [error, setError] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
+  /** Status pushed over the socket; drives the "updated live" banner. */
+  const [liveStatus, setLiveStatus] = useState<string | null>(null);
+  const { status: realtimeStatus } = useRealtime();
+
+  const refresh = useCallback(async () => {
+    const token = readToken();
+    if (!token) return;
+
+    const refreshed = await api.order(orderId, token).catch(() => null);
+    if (!refreshed) return;
+
+    setOrder(refreshed);
+    if (['CONFIRMED', 'PAID'].includes(refreshed.status)) {
+      void api.cancellationQuote(orderId, token).then(setQuote).catch(() => undefined);
+    }
+  }, [orderId]);
+
+  /**
+   * Realtime is what makes this page feel like a live booking rather than a
+   * receipt: payment capture, cancellation and gate redemption all arrive
+   * without a refresh. The payload carries `orderId`, so one shared socket can
+   * serve a page that is only interested in a single order.
+   */
+  useRealtimeEvent((event) => {
+    const payload = event.payload as { orderId?: string; status?: string };
+    if (payload.orderId !== orderId) return;
+
+    if (event.type === 'order.status_changed' && payload.status) {
+      setLiveStatus(payload.status);
+      void refresh();
+      return;
+    }
+
+    // A payment result always implies an order transition worth re-reading.
+    if (event.type === 'payment.status_changed') void refresh();
+  });
+
+  // The banner is a notification, not a permanent state.
+  useEffect(() => {
+    if (!liveStatus) return undefined;
+    const timer = setTimeout(() => setLiveStatus(null), 8_000);
+    return () => clearTimeout(timer);
+  }, [liveStatus]);
 
   useEffect(() => {
     // Nothing to do on the server-rendered path; re-fetching would be a wasted
@@ -33,7 +82,7 @@ export function OrderDetailView({
 
     const token = readToken();
     if (!token) {
-      setError('Sign in to view this order.');
+      setError(t('account.signInToView'));
       setLoading(false);
       return;
     }
@@ -48,14 +97,18 @@ export function OrderDetailView({
         }
       })
       .catch((caught) =>
-        setError(caught instanceof ApiError && caught.status === 403 ? 'This order belongs to another account.' : 'Could not load this order.'),
+        setError(
+          caught instanceof ApiError && caught.status === 403
+            ? t('account.orderNotYours')
+            : t('account.couldNotLoadOrder'),
+        ),
       )
       .finally(() => setLoading(false));
-  }, [orderId, initial]);
+  }, [orderId, initial, t]);
 
   async function cancelOrder() {
     if (!order) return;
-    if (!window.confirm('Cancel this booking? Any refundable amount is returned to your original payment method.')) {
+    if (!window.confirm(t('account.cancelConfirm'))) {
       return;
     }
 
@@ -64,12 +117,12 @@ export function OrderDetailView({
 
     setCancelling(true);
     try {
-      await api.cancelOrder(order.id, { reason: 'Cancelled by customer' }, token);
+      await api.cancelOrder(order.id, { reason: t('account.cancelReason') }, token);
       const refreshed = await api.order(order.id, token);
       setOrder(refreshed);
       setQuote(null);
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : 'Could not cancel this order.');
+      setError(caught instanceof ApiError ? caught.message : t('account.couldNotCancel'));
     } finally {
       setCancelling(false);
     }
@@ -87,9 +140,9 @@ export function OrderDetailView({
   if (error || !order) {
     return (
       <div className="card card-pad center stack">
-        <p className="muted">{error ?? 'Order not found.'}</p>
+        <p className="muted">{error ?? t('account.orderNotFound')}</p>
         <Link href="/orders" className="btn btn-primary">
-          My orders
+          {t('account.myBookings')}
         </Link>
       </div>
     );
@@ -107,10 +160,25 @@ export function OrderDetailView({
               ✓
             </span>
             <div>
-              <h3>You&rsquo;re booked</h3>
+              <h3>{t('account.thanks')}</h3>
               <p className="small muted" style={{ margin: 0 }}>
-                Your e-ticket{upcomingTickets.length === 1 ? '' : 's'} below can be scanned straight from your
-                phone. A confirmation email is on its way to {order.contactEmail}.
+                {t('account.thanksWithEmail', order.contactEmail)}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Pushed over the WebSocket, not polled: the shopper sees the booking
+          move while they are still looking at the page. */}
+      {liveStatus && (
+        <div className="card card-pad" style={{ borderColor: 'var(--brand-500)' }}>
+          <div className="row" style={{ gap: 'var(--sp-3)' }}>
+            <span className="notification-live-dot is-live" style={{ position: 'static' }} aria-hidden />
+            <div>
+              <strong className="small">{t('account.liveUpdate')}</strong>
+              <p className="tiny muted" style={{ margin: 0 }}>
+                {orderStatusLabel(liveStatus, locale)}
               </p>
             </div>
           </div>
@@ -127,10 +195,16 @@ export function OrderDetailView({
               <h1 className="mono" style={{ fontSize: 22 }}>
                 {order.orderNumber}
               </h1>
-              <span className={`badge badge-${orderStatusTone(order.status)}`}>{orderStatusLabel(order.status)}</span>
+              <span className={`badge badge-${orderStatusTone(order.status)}`}>
+                {orderStatusLabel(order.status, locale)}
+              </span>
+              <span className="tiny subtle row" style={{ gap: 6 }} title={realtimeStatus === 'open' ? t('account.liveOn') : t('account.liveOff')}>
+                <span className={`notification-live-dot ${realtimeStatus === 'open' ? 'is-live' : ''}`} style={{ position: 'static' }} aria-hidden />
+                {realtimeStatus === 'open' ? t('account.liveOn') : t('account.liveOff')}
+              </span>
             </div>
             <p className="small muted" style={{ margin: '4px 0 0' }}>
-              Placed {formatDateTime(order.placedAt)} · {order.contactEmail}
+              {t('account.placedOn')} {formatDateTime(order.placedAt, locale)} · {order.contactEmail}
             </p>
           </div>
           <div className="right">
@@ -139,21 +213,21 @@ export function OrderDetailView({
             </div>
             {order.totals.refundedCents > 0 && (
               <div className="small" style={{ color: 'var(--success-600)' }}>
-                {formatMoney(order.totals.refundedCents, order.currency)} refunded
+                {formatMoney(order.totals.refundedCents, order.currency)} {t('account.refunded')}
               </div>
             )}
           </div>
         </div>
       </div>
 
-      <div className="row" style={{ alignItems: 'flex-start', gap: 'var(--sp-5)' }}>
-        <div className="grow stack-lg" style={{ minWidth: 0 }}>
+      <div className="with-rail">
+        <div className="with-rail-main stack-lg">
           {/* ---------------------------------------------------------------- */}
           {/* E-tickets                                                       */}
           {/* ---------------------------------------------------------------- */}
           {order.tickets.length > 0 && (
             <section className="stack">
-              <h2 style={{ fontSize: 18 }}>Your e-tickets</h2>
+              <h2 style={{ fontSize: 18 }}>{t('account.eTickets')}</h2>
               {order.tickets.map((ticket) => (
                 <article key={ticket.id} className="ticket-pass">
                   <div className="ticket-pass-header">
@@ -166,7 +240,9 @@ export function OrderDetailView({
                       </div>
                     </div>
                     <span className="badge" style={{ background: 'rgba(255,255,255,0.2)', color: '#fff' }}>
-                      {ticket.status === 'REDEEMED' ? 'Used' : relativeDay(ticket.serviceDate)}
+                      {ticket.status === 'REDEEMED'
+                        ? t('account.used')
+                        : relativeDay(ticket.serviceDate, new Date(), locale)}
                     </span>
                   </div>
 
@@ -177,35 +253,35 @@ export function OrderDetailView({
                       <img src={mediaUrl(ticket.qrImageUrl) ?? ''} alt={`QR code for ticket ${ticket.ticketNumber}`} className="ticket-qr" />
                     ) : (
                       <div className="ticket-qr" style={{ display: 'grid', placeItems: 'center', fontSize: 11 }}>
-                        QR unavailable
+                        {t('account.qrUnavailable')}
                       </div>
                     )}
 
                     <div className="grow stack-sm" style={{ minWidth: 0 }}>
-                      <Row label="Date" value={formatDate(ticket.serviceDate)} />
-                      {ticket.timeSlot && <Row label="Time slot" value={ticket.timeSlot} />}
-                      <Row label="Guest" value={ticket.holderName} />
-                      <Row label="Guests" value={String(ticket.items.length)} />
+                      <Row label={t('product.dateLabel')} value={formatDate(ticket.serviceDate, locale)} />
+                      {ticket.timeSlot && <Row label={t('account.timeSlot')} value={ticket.timeSlot} />}
+                      <Row label={t('account.guestLabel')} value={ticket.holderName} />
+                      <Row label={t('account.guestsLabel')} value={String(ticket.items.length)} />
                       <div>
-                        <div className="tiny subtle">Ticket number</div>
+                        <div className="tiny subtle">{t('account.ticketNumber')}</div>
                         <div className="ticket-number">{ticket.ticketNumber}</div>
                       </div>
 
                       {ticket.items.some((item) => item.redeemedQty > 0) && (
-                        <span className="badge badge-neutral">Scanned at the gate</span>
+                        <span className="badge badge-neutral">{t('account.scannedAtGate')}</span>
                       )}
 
-                      <div className="row wrap" style={{ gap: 'var(--sp-2)', marginTop: 'auto', paddingTop: 'var(--sp-2)' }}>
+                      <div className="row wrap ticket-pass-actions" style={{ gap: 'var(--sp-2)', marginTop: 'auto', paddingTop: 'var(--sp-2)' }}>
                         {mediaUrl(ticket.pdfUrl) && (
                           <a href={mediaUrl(ticket.pdfUrl) ?? '#'} className="btn btn-secondary btn-sm" download>
-                            Download PDF
+                            {t('account.downloadPdf')}
                           </a>
                         )}
                         <button
                           className="btn btn-ghost btn-sm"
                           onClick={() => navigator.clipboard?.writeText(ticket.barcode)}
                         >
-                          Copy code
+                          {t('account.copyCode')}
                         </button>
                       </div>
                     </div>
@@ -219,7 +295,7 @@ export function OrderDetailView({
           {/* What you booked                                                 */}
           {/* ---------------------------------------------------------------- */}
           <section className="card card-pad stack">
-            <h2 style={{ fontSize: 18 }}>What you booked</h2>
+            <h2 style={{ fontSize: 18 }}>{t('account.whatYouBooked')}</h2>
             {order.items.map((item) => (
               <div key={item.id} className="row" style={{ gap: 'var(--sp-3)', alignItems: 'flex-start' }}>
                 {item.thumbnailUrl && (
@@ -234,8 +310,8 @@ export function OrderDetailView({
                     {item.productName}
                   </Link>
                   <div className="tiny subtle">
-                    {item.ticketTypeName} · {formatDate(item.serviceDate)}
-                    {item.timeSlot ? ` at ${item.timeSlot}` : ''}
+                    {item.ticketTypeName} · {formatDate(item.serviceDate, locale)}
+                    {item.timeSlot ? ` ${t('account.atTime', item.timeSlot)}` : ''}
                   </div>
                   {item.destination && <div className="tiny subtle">📍 {item.destination}</div>}
                   {item.meetingPoint && <div className="tiny subtle">📌 {item.meetingPoint}</div>}
@@ -243,7 +319,7 @@ export function OrderDetailView({
                 <div className="right nowrap">
                   <div className="bold small">{formatMoney(item.lineTotalCents, order.currency)}</div>
                   <div className="tiny subtle">
-                    {item.quantity} guest{item.quantity === 1 ? '' : 's'}
+                    {item.quantity} {item.quantity === 1 ? t('common.guest') : t('common.guests')}
                   </div>
                 </div>
               </div>
@@ -252,13 +328,13 @@ export function OrderDetailView({
             <hr className="divider" style={{ margin: 'var(--sp-2) 0' }} />
 
             <div className="price-row">
-              <span className="label">Subtotal</span>
+              <span className="label">{t('product.subtotal')}</span>
               <span>{formatMoney(order.totals.subtotalCents, order.currency)}</span>
             </div>
             {order.totals.discountCents > 0 && (
               <div className="price-row">
                 <span className="label" style={{ color: 'var(--success-600)' }}>
-                  Discounts
+                  {t('product.discount')}
                 </span>
                 <span style={{ color: 'var(--success-600)' }}>
                   −{formatMoney(order.totals.discountCents, order.currency)}
@@ -266,16 +342,16 @@ export function OrderDetailView({
               </div>
             )}
             <div className="price-row">
-              <span className="label">Taxes &amp; fees</span>
+              <span className="label">{t('product.taxesAndFees')}</span>
               <span>{formatMoney(order.totals.taxCents + order.totals.feeCents, order.currency)}</span>
             </div>
             <div className="price-row total">
-              <span>Total paid</span>
+              <span>{t('account.totalPaid')}</span>
               <span>{formatMoney(order.totals.totalCents, order.currency)}</span>
             </div>
             {order.totals.pointsEarned > 0 && (
               <div className="small" style={{ color: 'var(--success-600)' }}>
-                You earned {order.totals.pointsEarned.toLocaleString()} Voyahub points.
+                {t('account.pointsEarned', order.totals.pointsEarned.toLocaleString())}
               </div>
             )}
           </section>
@@ -285,11 +361,11 @@ export function OrderDetailView({
           {/* ---------------------------------------------------------------- */}
           {order.refunds.length > 0 && (
             <section className="card card-pad stack">
-              <h2 style={{ fontSize: 18 }}>Refunds</h2>
+              <h2 style={{ fontSize: 18 }}>{t('account.refunds')}</h2>
               {order.refunds.map((refund) => (
                 <div key={refund.id} className="row-between small">
                   <span className="muted">
-                    {refund.reason} · {formatDate(refund.processedAt)}
+                    {refund.reason} · {formatDate(refund.processedAt, locale)}
                   </span>
                   <span className="bold" style={{ color: 'var(--success-600)' }}>
                     +{formatMoney(refund.amountCents, order.currency)}
@@ -303,22 +379,22 @@ export function OrderDetailView({
         {/* ------------------------------------------------------------------ */}
         {/* Sidebar: cancellation + timeline                                  */}
         {/* ------------------------------------------------------------------ */}
-        <aside style={{ width: 320, flexShrink: 0 }} className="stack">
+        <aside className="with-rail-side stack">
           {canCancel && (
             <div className="card card-pad stack">
-              <h3 style={{ fontSize: 16 }}>Need to cancel?</h3>
+              <h3 style={{ fontSize: 16 }}>{t('account.needToCancel')}</h3>
               {quote && (
                 <>
                   <div className="panel small">
                     <div className="row-between">
-                      <span className="muted">Refundable now</span>
+                      <span className="muted">{t('account.refundableNow')}</span>
                       <span className="bold" style={{ color: 'var(--success-600)' }}>
                         {formatMoney(quote.refundCents, order.currency)}
                       </span>
                     </div>
                     {quote.penaltyCents > 0 && (
                       <div className="row-between" style={{ marginTop: 4 }}>
-                        <span className="muted">Cancellation fee</span>
+                        <span className="muted">{t('account.cancellationFee')}</span>
                         <span className="bold">{formatMoney(quote.penaltyCents, order.currency)}</span>
                       </div>
                     )}
@@ -328,7 +404,7 @@ export function OrderDetailView({
                   </div>
 
                   <button className="btn btn-secondary btn-block" onClick={cancelOrder} disabled={cancelling}>
-                    {cancelling ? 'Cancelling…' : 'Cancel booking'}
+                    {cancelling ? t('account.cancelling') : t('account.cancelBooking')}
                   </button>
                 </>
               )}
@@ -337,7 +413,7 @@ export function OrderDetailView({
 
           {order.timeline.length > 0 && (
             <div className="card card-pad stack">
-              <h3 style={{ fontSize: 16 }}>Order timeline</h3>
+              <h3 style={{ fontSize: 16 }}>{t('account.orderTimeline')}</h3>
               <div className="stack-sm">
                 {order.timeline
                   .slice()
@@ -356,8 +432,8 @@ export function OrderDetailView({
                         }}
                       />
                       <div>
-                        <div className="small bold">{orderStatusLabel(entry.to)}</div>
-                        <div className="tiny subtle">{formatDateTime(entry.createdAt)}</div>
+                        <div className="small bold">{orderStatusLabel(entry.to, locale)}</div>
+                        <div className="tiny subtle">{formatDateTime(entry.createdAt, locale)}</div>
                         {entry.reason && <div className="tiny muted">{entry.reason}</div>}
                       </div>
                     </div>
@@ -367,10 +443,9 @@ export function OrderDetailView({
           )}
 
           <div className="card card-pad stack-sm">
-            <h3 style={{ fontSize: 15 }}>Need help?</h3>
+            <h3 style={{ fontSize: 15 }}>{t('account.needHelp')}</h3>
             <p className="small muted" style={{ margin: 0 }}>
-              Reply to your confirmation email or contact support with order number{' '}
-              <span className="mono">{order.orderNumber}</span>.
+              {t('account.needHelpBody')} <span className="mono">{order.orderNumber}</span>.
             </p>
           </div>
         </aside>

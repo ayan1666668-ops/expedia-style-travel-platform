@@ -31,7 +31,11 @@ datasource db {
 enum UserRole {
   CUSTOMER
   MERCHANT
+  // Gate staff: can verify and redeem tickets, nothing else.
   OPERATOR
+  // Customer support: can look up orders and users and issue refunds, but
+  // cannot change catalogue, pricing or other people's balances.
+  SUPPORT
   ADMIN
 }
 
@@ -48,8 +52,15 @@ model User {
   avatarUrl       String?
   marketingOptIn  Boolean   @default(false)
   emailVerifiedAt DateTime?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+
+  // Stored-value balance in minor units (cents). Deliberately separate from
+  // loyalty points: points are non-monetary and can expire, this is spendable
+  // credit. Every mutation writes a WalletTransaction so it stays auditable.
+  walletCents   Int      @default(0)
+  walletEnabled Boolean  @default(false)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
   merchant         Merchant?
   orders           Order[]
@@ -61,6 +72,7 @@ model User {
   searchLogs       SearchQueryLog[]
   travelerProfiles TravelerProfile[]
   sessions         UserSession[]
+  walletLedger     WalletTransaction[]
 
   @@index([role])
 }
@@ -1482,4 +1494,98 @@ model DailyMetric {
   createdAt        DateTime @default(now())
 
   @@unique([date, market])
+}
+
+// ===========================================================================
+// Stored-value wallet
+//
+// A manual balance adjustment by staff is a credit decision, so it is modelled
+// as an append-only ledger rather than an UPDATE on the balance. The running
+// total lives on User for O(1) reads; this table is the explanation.
+// ===========================================================================
+
+enum WalletTransactionKind {
+  CREDIT
+  DEBIT
+  REFUND
+  ADJUSTMENT
+  REVERSAL
+}
+
+model WalletTransaction {
+  id     String                @id @default(cuid())
+  userId String
+  user   User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind   WalletTransactionKind
+
+  // Signed delta in minor units. Credits are positive, debits negative.
+  amountCents Int
+  currency    String            @default("USD")
+
+  // Balance immediately after this entry — lets support reconcile by eye.
+  balanceAfterCents Int
+
+  orderId String?
+  note    String?
+
+  // Who performed it. Null means the platform did (refund, redemption).
+  actorId    String?
+  actorEmail String?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([orderId])
+}
+
+// ===========================================================================
+// Promotional banners
+//
+// Merchandising content shown on the storefront (hero strips, seasonal
+// callouts). Kept separate from Coupon: a banner is *presentation*, a coupon is
+// *a discount rule*. Ops frequently want the banner without a discount, and a
+// discount without a banner.
+// ===========================================================================
+
+model PromoBanner {
+  id String @id @default(cuid())
+
+  // Machine key used for stable placement, e.g. "home-hero", "home-strip".
+  slot String @default("home")
+
+  // Bilingual copy. Falls back to the `en` field when a translation is blank.
+  titleEn String
+  titleZh String?
+  bodyEn  String?
+  bodyZh  String?
+
+  ctaLabelEn String?
+  ctaLabelZh String?
+  ctaHref    String?
+
+  imageUrl String?
+
+  // Optional visual treatment.
+  theme String @default("brand") // brand | accent | success | warning | neutral
+
+  // Scheduling. Null means "always eligible".
+  startsAt DateTime?
+  endsAt   DateTime?
+
+  isActive Boolean @default(true)
+
+  // Lower sorts first within a slot.
+  sortOrder Int @default(0)
+
+  // Optional targeting; empty = everyone.
+  markets String[] @default([])
+  locales String[] @default([])
+
+  clickCount Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([slot, isActive, sortOrder])
+  @@index([startsAt, endsAt])
 }

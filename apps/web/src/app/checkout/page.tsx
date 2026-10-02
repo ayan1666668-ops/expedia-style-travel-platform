@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { CheckoutFlow } from '@/components/CheckoutFlow';
+import { resolveServerLocale } from '@/lib/i18n/config';
 
 /**
  * The checkout itself is a client flow (it holds payment state), but the slug
@@ -15,5 +16,6 @@ export default async function CheckoutPage({
 
   if (!slug) redirect('/search');
 
-  return <CheckoutFlow slug={slug} />;
+  const locale = await resolveServerLocale();
+  return <CheckoutFlow slug={slug} locale={locale} />;
 }

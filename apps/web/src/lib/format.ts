@@ -1,13 +1,30 @@
-/** Formatting helpers shared by server and client components. */
+/**
+ * Formatting helpers shared by server and client components.
+ *
+ * Everything here takes an optional locale. The UI speaks bare language tags
+ * ("en", "zh") while `Intl` wants a regional tag, so `intlTag` bridges the two
+ * — and falls back to the caller's own value so a fully-qualified tag still
+ * works.
+ */
+
+import type { LocaleCode } from '@/lib/i18n/config';
+import { translate } from '@/lib/i18n/dictionaries';
+
+const INTL_TAGS: Record<string, string> = { en: 'en-US', zh: 'zh-CN' };
+
+/** Maps a UI locale onto an `Intl` locale tag. */
+export function intlTag(locale: LocaleCode | string = 'en'): string {
+  return INTL_TAGS[locale] ?? locale;
+}
 
 const ZERO_DECIMAL = new Set(['JPY', 'KRW', 'VND', 'CLP', 'ISK', 'HUF', 'TWD']);
 
 /** Money is always integer minor units; this is the only place it becomes text. */
-export function formatMoney(cents: number, currency = 'USD', locale = 'en-US'): string {
+export function formatMoney(cents: number, currency = 'USD', locale: LocaleCode | string = 'en'): string {
   const exponent = ZERO_DECIMAL.has(currency.toUpperCase()) ? 0 : 2;
   const amount = cents / Math.pow(10, exponent);
   try {
-    return new Intl.NumberFormat(locale, {
+    return new Intl.NumberFormat(intlTag(locale), {
       style: 'currency',
       currency,
       currencyDisplay: exponent === 0 ? 'code' : 'symbol',
@@ -18,16 +35,20 @@ export function formatMoney(cents: number, currency = 'USD', locale = 'en-US'): 
   }
 }
 
-export function formatDate(date: string | Date, locale = 'en-US'): string {
+export function formatDate(date: string | Date, locale: LocaleCode | string = 'en'): string {
   const value = typeof date === 'string' ? new Date(date) : date;
   if (Number.isNaN(value.getTime())) return '';
-  return new Intl.DateTimeFormat(locale, { month: 'short', day: 'numeric', year: 'numeric' }).format(value);
+  return new Intl.DateTimeFormat(intlTag(locale), {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  }).format(value);
 }
 
-export function formatDateTime(date: string | Date, locale = 'en-US'): string {
+export function formatDateTime(date: string | Date, locale: LocaleCode | string = 'en'): string {
   const value = typeof date === 'string' ? new Date(date) : date;
   if (Number.isNaN(value.getTime())) return '';
-  return new Intl.DateTimeFormat(locale, {
+  return new Intl.DateTimeFormat(intlTag(locale), {
     month: 'short',
     day: 'numeric',
     hour: 'numeric',
@@ -36,7 +57,11 @@ export function formatDateTime(date: string | Date, locale = 'en-US'): string {
 }
 
 /** "in 3 days" / "tomorrow" / "2 months ago" - used on tickets and itineraries. */
-export function relativeDay(date: string | Date, now = new Date()): string {
+export function relativeDay(
+  date: string | Date,
+  now = new Date(),
+  locale: LocaleCode | string = 'en',
+): string {
   const value = typeof date === 'string' ? new Date(date) : date;
   if (Number.isNaN(value.getTime())) return '';
 
@@ -44,13 +69,15 @@ export function relativeDay(date: string | Date, now = new Date()): string {
   const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   const days = Math.round((target.getTime() - today.getTime()) / 86_400_000);
 
-  if (days === 0) return 'Today';
-  if (days === 1) return 'Tomorrow';
-  if (days === -1) return 'Yesterday';
-  if (days > 1 && days < 7) return `In ${days} days`;
-  if (days < -1 && days > -7) return `${Math.abs(days)} days ago`;
-  if (days > 0) return `In ${Math.round(days / 30)} month${days > 60 ? 's' : ''}`;
-  return `${Math.abs(Math.round(days / 30))} month${days < -60 ? 's' : ''} ago`;
+  const t = (key: string, ...args: unknown[]) => translate(locale as LocaleCode, key, ...args);
+
+  if (days === 0) return t('dates.today');
+  if (days === 1) return t('dates.tomorrow');
+  if (days === -1) return t('dates.yesterday');
+  if (days > 1 && days < 7) return t('dates.inDays', days);
+  if (days < -1 && days > -7) return t('dates.daysAgo', Math.abs(days));
+  if (days > 0) return t('dates.inMonths', Math.round(days / 30));
+  return t('dates.monthsAgo', Math.abs(Math.round(days / 30)));
 }
 
 export function discountPercent(currentCents: number, compareCents: number | null): number | null {
@@ -74,23 +101,14 @@ export const TYPE_LABELS: Record<string, string> = {
   RENTAL_CAR: 'Car rental',
 };
 
-export const ORDER_STATUS_LABELS: Record<string, string> = {
-  DRAFT: 'Draft',
-  PENDING_PAYMENT: 'Awaiting payment',
-  PAID: 'Paid',
-  CONFIRMED: 'Confirmed',
-  IN_PROGRESS: 'In progress',
-  COMPLETED: 'Completed',
-  CANCELLED: 'Cancelled',
-  REFUNDED: 'Refunded',
-  PARTIALLY_REFUNDED: 'Partly refunded',
-  EXPIRED: 'Expired',
-  FAILED: 'Failed',
-};
+/** Maps an order status to shopper-facing copy in the caller's language. */
+export function orderStatusLabel(status: string, locale: LocaleCode | string = 'en'): string {
+  return translate(locale as LocaleCode, `orderStatus.${status}`);
+}
 
-/** Maps an order status to shopper-facing copy. */
-export function orderStatusLabel(status: string): string {
-  return ORDER_STATUS_LABELS[status] ?? status;
+/** Maps a ticket status to shopper-facing copy in the caller's language. */
+export function ticketStatusLabel(status: string, locale: LocaleCode | string = 'en'): string {
+  return translate(locale as LocaleCode, `ticketStatus.${status}`);
 }
 
 /** Maps an order status to the badge tone used across the UI. */

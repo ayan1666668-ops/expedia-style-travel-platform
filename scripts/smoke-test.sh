@@ -15,6 +15,9 @@ API="${1:-http://localhost:4000}"
 PASS=0
 FAIL=0
 
+# Clean up response snapshots written by the unified-search assertions.
+trap 'rm -f "${SEARCH_FILE:-}" "${MULTI_FILE:-}" "${CAT_FILE:-}" 2>/dev/null || true' EXIT
+
 green() { printf "\033[32m%s\033[0m\n" "$1"; }
 red()   { printf "\033[31m%s\033[0m\n" "$1"; }
 head2() { printf "\n\033[1;36m── %s\033[0m\n" "$1"; }
@@ -72,7 +75,12 @@ done
 check "GET /ready reports database connected" "$(echo "$READY" | jget '.checks.database' | grep -q true && echo true || echo false)"
 
 head2 "Search"
+# Keep the raw search JSON on disk as well: parsing a large response straight
+# from a variable through a pipe can misreport the exit code under `set -e`,
+# so the unified-search assertions below read the response file directly.
 SEARCH=$(curl -fsS "$API/api/v1/search?pageSize=5")
+SEARCH_FILE=$(mktemp)
+printf '%s\n' "$SEARCH" > "$SEARCH_FILE"
 TOTAL=$(echo "$SEARCH" | jget '.total')
 check "GET /api/v1/search returns results (total>0)" "$([ "${TOTAL:-0}" -gt 0 ] && echo true || echo false)"
 
@@ -81,6 +89,34 @@ check "search returns a product slug" "$([ -n "$FIRST_SLUG" ] && [ "$FIRST_SLUG"
 
 PRICE=$(echo "$SEARCH" | jget '.items.0.priceCents')
 check "search hit carries a price (${PRICE:-none} cents)" "$([ -n "$PRICE" ] && [ "$PRICE" != "null" ] && [ "$PRICE" -gt 0 ] 2>/dev/null && echo true || echo false)"
+
+head2 "Unified multi-category search"
+# Each metric is resolved by a node call that reads the response file directly.
+# NOTE: do NOT name the category-count variable `GROUPS` — bash exposes `GROUPS`
+# as a read-only array of the caller's group IDs, so assigning to it fails with
+# a non-zero status and `set -e` aborts the whole run.
+GROUP_COUNT=$(node -e 'const fs=require("fs"),o=JSON.parse(fs.readFileSync(process.argv[1],"utf8")),g=o.groups||[];console.log(g.length)' "$SEARCH_FILE" || true)
+GROUP_OK=$(node -e 'const fs=require("fs"),o=JSON.parse(fs.readFileSync(process.argv[1],"utf8")),g=o.groups||[];console.log(g.length>0&&g.every(x=>typeof x.type==="string"&&typeof x.label==="string"&&typeof x.count==="number"&&x.count>=x.items.length))' "$SEARCH_FILE" || true)
+FACET_TYPES=$(node -e 'const fs=require("fs"),o=JSON.parse(fs.readFileSync(process.argv[1],"utf8")),f=o.facets?o.facets.types:[],n=f?f.length:0;console.log(n)' "$SEARCH_FILE" || true)
+check "unified search returns category groups (${GROUP_COUNT:-0})" "$([ "${GROUP_COUNT:-0}" -gt 0 ] && echo true || echo false)"
+check "each group carries type/label/count" "$([ "$GROUP_OK" = "true" ] && echo true || echo false)"
+check "type facet is populated (${FACET_TYPES:-0} categories)" "$([ "${FACET_TYPES:-0}" -gt 0 ] && echo true || echo false)"
+
+# Multi-category filter: `types=A,B` must return only those two categories, and
+# the disjunctive type facet must still list the *other* categories (so the tab
+# bar does not collapse to the selected ones).
+MULTI_FILE=$(mktemp)
+curl -fsS "$API/api/v1/search?types=ATTRACTION_TICKET,CRUISE&pageSize=50" -o "$MULTI_FILE"
+MULTI_OK=$(node -e 'const fs=require("fs"),o=JSON.parse(fs.readFileSync(process.argv[1],"utf8")),ts=new Set(o.items.map(i=>i.type)),gs=o.groups?o.groups.length:0;console.log([...ts].every(t=>t==="ATTRACTION_TICKET"||t==="CRUISE")&&ts.size>0&&gs===0)' "$MULTI_FILE" || true)
+check "GET /search?types=A,B narrows to the selected categories" "$([ "$MULTI_OK" = "true" ] && echo true || echo false)"
+
+DISJUNCTIVE=$(node -e 'const fs=require("fs"),o=JSON.parse(fs.readFileSync(process.argv[1],"utf8")),ft=o.facets?o.facets.types:[],ids=ft?ft.map(f=>f.value):[];console.log(ids.length>1&&ids.some(v=>v!=="ATTRACTION_TICKET"&&v!=="CRUISE"))' "$MULTI_FILE" || true)
+check "type facet stays disjunctive while a category is selected" "$([ "$DISJUNCTIVE" = "true" ] && echo true || echo false)"
+
+CAT_FILE=$(mktemp)
+curl -fsS "$API/api/v1/search/categories" -o "$CAT_FILE"
+CAT_SUM=$(node -e 'const fs=require("fs"),o=JSON.parse(fs.readFileSync(process.argv[1],"utf8")),cs=o.categories||[];console.log(cs.every(c=>c.label&&c.productCount>0&&c.fromPriceCents>0))' "$CAT_FILE" || true)
+check "GET /search/categories rolls up the catalogue" "$([ "$CAT_SUM" = "true" ] && echo true || echo false)"
 
 head2 "Destinations & collections"
 DEST=$(curl -fsS "$API/api/v1/destinations")
@@ -236,6 +272,21 @@ check "POST a verified review" "$(echo "$POST_REVIEW" | jget '.id' | grep -qv 'n
 head2 "Loyalty"
 ACCOUNT=$(curl -fsS "$API/api/v1/loyalty/account" -H "Authorization: Bearer $TOKEN")
 check "loyalty account is readable" "$(echo "$ACCOUNT" | jget '.tier' | grep -qv 'null' && echo true || echo false)"
+
+head2 "Notification centre (durable half of realtime)"
+NOTIFS=$(curl -fsS "$API/api/v1/notifications" -H "Authorization: Bearer $TOKEN")
+NOTIF_COUNT=$(echo "$NOTIFS" | jget '.items' | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{console.log(JSON.parse(d).length)}catch{console.log(0)}});")
+check "GET /notifications returns items (${NOTIF_COUNT:-0})" "$([ "${NOTIF_COUNT:-0}" -gt 0 ] && echo true || echo false)"
+
+NOTIF_FOR_ORDER=$(echo "$NOTIFS" | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{const o=JSON.parse(d);console.log(o.items.some(n=>n.orderId==='$ORDER_ID'))}catch{console.log(false)}});")
+check "a durable notification exists for the confirmed order" "$([ "$NOTIF_FOR_ORDER" = "true" ] && echo true || echo false)"
+
+NOTIF_ID=$(echo "$NOTIFS" | jget '.items.0.id')
+READ=$(curl -fsS -X POST "$API/api/v1/notifications/$NOTIF_ID/read" -H "Authorization: Bearer $TOKEN")
+check "POST /notifications/:id/read marks it read" "$(echo "$READ" | jget '.ok' | grep -q true && echo true || echo false)"
+
+ANON_NOTIFS=$(curl -s -o /dev/null -w '%{http_code}' "$API/api/v1/notifications")
+check "notifications reject anonymous access (401)" "$([ "$ANON_NOTIFS" = "401" ] && echo true || echo false)"
 
 head2 "Admin"
 ADMIN=$(curl -fsS -X POST "$API/api/v1/auth/login" \

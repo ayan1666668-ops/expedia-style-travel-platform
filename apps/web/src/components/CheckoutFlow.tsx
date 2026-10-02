@@ -6,10 +6,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { api, ApiError, type ProductDetail } from '@/lib/api';
 import { readToken } from '@/lib/session';
 import { formatDate, formatMoney } from '@/lib/format';
+import type { LocaleCode } from '@/lib/i18n/config';
+import { createTranslator } from '@/lib/i18n/dictionaries';
 
 type Step = 'review' | 'guest' | 'payment' | 'confirming';
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:4000';
 
 /**
  * Checkout is a four-step client flow:
@@ -19,7 +19,8 @@ const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:4000'
  * the price) before payment is attempted, so nothing shown here is invented
  * client-side.
  */
-export function CheckoutFlow({ slug }: { slug: string }) {
+export function CheckoutFlow({ slug, locale }: { slug: string; locale: LocaleCode }) {
+  const t = createTranslator(locale);
   const router = useRouter();
   const params = useSearchParams();
 
@@ -55,9 +56,9 @@ export function CheckoutFlow({ slug }: { slug: string }) {
     api
       .product(slug, { date: serviceDate, quantity })
       .then(setProduct)
-      .catch(() => setError('We could not load this experience. Please go back and try again.'))
+      .catch(() => setError(t('checkout.couldNotLoad')))
       .finally(() => setLoading(false));
-  }, [slug, serviceDate, quantity]);
+  }, [slug, serviceDate, quantity, t]);
 
   const selected = useMemo(
     () => product?.ticketTypes.find((t) => t.id === ticketTypeId) ?? product?.ticketTypes[0] ?? null,
@@ -86,7 +87,7 @@ export function CheckoutFlow({ slug }: { slug: string }) {
       const message =
         caught instanceof ApiError
           ? caught.message
-          : 'We could not start the booking. Please try again.';
+          : t('checkout.couldNotStartBooking');
       setError(message);
       return null;
     } finally {
@@ -122,13 +123,13 @@ export function CheckoutFlow({ slug }: { slug: string }) {
       }
       if (result.status === 'REQUIRES_ACTION') {
         // A real gateway would open a 3-D Secure challenge here.
-        setError('Your bank needs an extra verification step. Please try another card.');
+        setError(t('checkout.bankVerification'));
       } else {
-        setError(result.failureMessage ?? 'The payment was declined. Please try another card.');
+        setError(result.failureMessage ?? t('checkout.declined'));
       }
       setStep('payment');
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : 'Payment failed. Please try again.');
+      setError(caught instanceof ApiError ? caught.message : t('checkout.failed'));
       setStep('payment');
     } finally {
       setBusy(false);
@@ -165,9 +166,9 @@ export function CheckoutFlow({ slug }: { slug: string }) {
     return (
       <div className="container" style={{ paddingTop: 'var(--sp-7)' }}>
         <div className="card card-pad center">
-          <p className="muted">{error ?? 'This option is no longer available.'}</p>
+          <p className="muted">{error ?? t('checkout.noLongerAvailable')}</p>
           <Link href={`/products/${slug}`} className="btn btn-primary" style={{ marginTop: 'var(--sp-3)' }}>
-            Back to the experience
+            {t('checkout.backToExperience')}
           </Link>
         </div>
       </div>
@@ -178,11 +179,11 @@ export function CheckoutFlow({ slug }: { slug: string }) {
     <div className="container" style={{ paddingTop: 'var(--sp-5)', paddingBottom: 'var(--sp-7)' }}>
       <div className="row" style={{ gap: 'var(--sp-2)', marginBottom: 'var(--sp-4)' }}>
         <Link href={`/products/${slug}`} className="small" style={{ color: 'var(--brand-600)' }}>
-          ← Back
+          ← {t('checkout.back')}
         </Link>
       </div>
 
-      <h1 style={{ fontSize: 26, marginBottom: 'var(--sp-5)' }}>Secure checkout</h1>
+      <h1 style={{ fontSize: 26, marginBottom: 'var(--sp-5)' }}>{t('checkout.secureTitle')}</h1>
 
       <div className="row" style={{ alignItems: 'flex-start', gap: 'var(--sp-5)' }}>
         {/* ---------------------------------------------------------------- */}
@@ -214,7 +215,11 @@ export function CheckoutFlow({ slug }: { slug: string }) {
                     {index + 1}
                   </span>
                   <span className="small" style={{ fontWeight: done ? 700 : 500, color: done ? 'var(--text)' : 'var(--text-subtle)' }}>
-                    {stage === 'review' ? 'Review' : stage === 'guest' ? 'Your details' : 'Payment'}
+                    {stage === 'review'
+                      ? t('checkout.stepReview')
+                      : stage === 'guest'
+                        ? t('checkout.stepGuest')
+                        : t('checkout.stepPayment')}
                   </span>
                   {index < 2 && <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />}
                 </div>
@@ -240,27 +245,31 @@ export function CheckoutFlow({ slug }: { slug: string }) {
           {/* ------------------------------------------------------------ */}
           {step === 'review' && (
             <div className="card card-pad stack">
-              <h2 style={{ fontSize: 17 }}>Review your selection</h2>
+              <h2 style={{ fontSize: 17 }}>{t('checkout.reviewSelection')}</h2>
               <div className="stack-sm">
-                <Line label="Experience" value={product.name} />
-                <Line label="Option" value={selected.name} />
-                <Line label="Date" value={formatDate(serviceDate)} />
-                <Line label="Guests" value={String(quantity)} />
-                {product.destination && <Line label="Location" value={product.destination.name} />}
-                {product.meetingPoint && <Line label="Meeting point" value={product.meetingPoint} />}
+                <Line label={t('checkout.experienceLabel')} value={product.name} />
+                <Line label={t('checkout.optionLabel')} value={selected.name} />
+                <Line label={t('product.dateLabel')} value={formatDate(serviceDate, locale)} />
+                <Line label={t('account.guestsLabel')} value={String(quantity)} />
+                {product.destination && (
+                  <Line label={t('product.locationLabel')} value={product.destination.name} />
+                )}
+                {product.meetingPoint && (
+                  <Line label={t('product.meetingPoint')} value={product.meetingPoint} />
+                )}
               </div>
 
               {product.cancellationPolicy && (
                 <div className="panel small">
                   <div className="bold" style={{ marginBottom: 4 }}>
-                    Free cancellation
+                    {t('search.freeCancellation')}
                   </div>
                   <div className="muted">{product.cancellationPolicy.description}</div>
                 </div>
               )}
 
               <button className="btn btn-primary btn-lg btn-block" onClick={() => setStep('guest')}>
-                Continue to details
+                {t('checkout.continueToDetails')}
               </button>
             </div>
           )}
@@ -270,11 +279,11 @@ export function CheckoutFlow({ slug }: { slug: string }) {
           {/* ------------------------------------------------------------ */}
           {step === 'guest' && (
             <form className="card card-pad stack" onSubmit={submitGuestDetails}>
-              <h2 style={{ fontSize: 17 }}>Your details</h2>
+              <h2 style={{ fontSize: 17 }}>{t('checkout.stepGuest')}</h2>
 
               <div className="field">
                 <label htmlFor="email" className="label">
-                  Email address
+                  {t('checkout.emailAddress')}
                 </label>
                 <input
                   id="email"
@@ -285,12 +294,12 @@ export function CheckoutFlow({ slug }: { slug: string }) {
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="you@example.com"
                 />
-                <span className="tiny subtle">Your e-tickets and receipt go here.</span>
+                <span className="tiny subtle">{t('checkout.emailHint')}</span>
               </div>
 
               <div className="field">
                 <label htmlFor="name" className="label">
-                  Lead guest name
+                  {t('checkout.leadGuestName')}
                 </label>
                 <input
                   id="name"
@@ -298,13 +307,13 @@ export function CheckoutFlow({ slug }: { slug: string }) {
                   required
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
-                  placeholder="As printed on your ID"
+                  placeholder={t('checkout.namePlaceholder')}
                 />
               </div>
 
               <div className="field">
                 <label htmlFor="phone" className="label">
-                  Phone (optional)
+                  {t('checkout.phoneOptional')}
                 </label>
                 <input
                   id="phone"
@@ -312,13 +321,13 @@ export function CheckoutFlow({ slug }: { slug: string }) {
                   type="tel"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
-                  placeholder="For urgent updates only"
+                  placeholder={t('checkout.phonePlaceholder')}
                 />
               </div>
 
               <div className="field">
                 <label htmlFor="coupon" className="label">
-                  Promo code
+                  {t('product.promoCode')}
                 </label>
                 <input
                   id="coupon"
@@ -327,11 +336,11 @@ export function CheckoutFlow({ slug }: { slug: string }) {
                   onChange={(e) => setCoupon(e.target.value)}
                   placeholder="WELCOME10"
                 />
-                <span className="tiny subtle">Your seats are held for 15 minutes while you pay.</span>
+                <span className="tiny subtle">{t('checkout.seatsHeldNote')}</span>
               </div>
 
               <button className="btn btn-primary btn-lg btn-block" type="submit" disabled={busy}>
-                {busy ? 'Reserving your seats…' : 'Reserve & continue to payment'}
+                {busy ? t('checkout.reservingSeats') : t('checkout.reserveAndContinue')}
               </button>
             </form>
           )}
@@ -341,17 +350,18 @@ export function CheckoutFlow({ slug }: { slug: string }) {
           {/* ------------------------------------------------------------ */}
           {(step === 'payment' || step === 'confirming') && (
             <form className="card card-pad stack" onSubmit={submitPayment}>
-              <h2 style={{ fontSize: 17 }}>Payment</h2>
+              <h2 style={{ fontSize: 17 }}>{t('checkout.stepPayment')}</h2>
 
               {orderNumber && (
                 <div className="panel small">
-                  Order <span className="bold mono">{orderNumber}</span> · your seats are held until payment completes.
+                  {t('checkout.orderLabel')} <span className="bold mono">{orderNumber}</span> ·{' '}
+                  {t('checkout.seatsHeldUntilPayment')}
                 </div>
               )}
 
               <div className="field">
                 <label htmlFor="card" className="label">
-                  Card number
+                  {t('checkout.cardNumber')}
                 </label>
                 <input
                   id="card"
@@ -368,7 +378,7 @@ export function CheckoutFlow({ slug }: { slug: string }) {
               <div className="row" style={{ gap: 'var(--sp-3)' }}>
                 <div className="field grow">
                   <label htmlFor="expMonth" className="label">
-                    Expiry month
+                    {t('checkout.expiryMonth')}
                   </label>
                   <input
                     id="expMonth"
@@ -382,7 +392,7 @@ export function CheckoutFlow({ slug }: { slug: string }) {
                 </div>
                 <div className="field grow">
                   <label htmlFor="expYear" className="label">
-                    Expiry year
+                    {t('checkout.expiryYear')}
                   </label>
                   <input
                     id="expYear"
@@ -396,7 +406,7 @@ export function CheckoutFlow({ slug }: { slug: string }) {
                 </div>
                 <div className="field grow">
                   <label htmlFor="cvc" className="label">
-                    CVC
+                    {t('checkout.cvc')}
                   </label>
                   <input
                     id="cvc"
@@ -413,14 +423,20 @@ export function CheckoutFlow({ slug }: { slug: string }) {
 
               <div className="panel tiny muted">
                 <div className="bold" style={{ marginBottom: 4 }}>
-                  Test mode — no real charge
+                  {t('checkout.testMode')}
                 </div>
-                Use <span className="mono">4242 4242 4242 4242</span> to approve,{' '}
-                <span className="mono">4000 0000 0000 0002</span> to decline. Any future expiry and CVC.
+                {t('checkout.testModeUse')} <span className="mono">4242 4242 4242 4242</span>{' '}
+                {t('checkout.testModeApprove')} <span className="mono">4000 0000 0000 0002</span>{' '}
+                {t('checkout.testModeDecline')}
               </div>
 
               <button className="btn btn-accent btn-lg btn-block" type="submit" disabled={busy || step === 'confirming'}>
-                {step === 'confirming' ? 'Processing payment…' : `Pay ${formatMoney(totalCents || selected.lineTotalCents, selected.currency)}`}
+                {step === 'confirming'
+                  ? t('checkout.processing')
+                  : t(
+                      'checkout.payAmount',
+                      formatMoney(totalCents || selected.lineTotalCents, selected.currency),
+                    )}
               </button>
             </form>
           )}
@@ -431,7 +447,7 @@ export function CheckoutFlow({ slug }: { slug: string }) {
         {/* ---------------------------------------------------------------- */}
         <aside style={{ width: 340, flexShrink: 0 }} className="booking-panel-col">
           <div className="card card-pad stack" style={{ position: 'sticky', top: 'calc(var(--header-h) + var(--sp-4))' }}>
-            <h3 style={{ fontSize: 16 }}>Order summary</h3>
+            <h3 style={{ fontSize: 16 }}>{t('checkout.orderSummary')}</h3>
 
             <div className="row" style={{ gap: 'var(--sp-3)', alignItems: 'flex-start' }}>
               {product.media[0] && (
@@ -445,7 +461,8 @@ export function CheckoutFlow({ slug }: { slug: string }) {
                 <div className="small bold truncate">{product.name}</div>
                 <div className="tiny subtle truncate">{selected.name}</div>
                 <div className="tiny subtle">
-                  {formatDate(serviceDate)} · {quantity} guest{quantity === 1 ? '' : 's'}
+                  {formatDate(serviceDate, locale)} · {quantity}{' '}
+                  {quantity === 1 ? t('common.guest') : t('common.guests')}
                 </div>
               </div>
             </div>
@@ -462,19 +479,20 @@ export function CheckoutFlow({ slug }: { slug: string }) {
             </div>
 
             <div className="price-row total">
-              <span>Total (taxes &amp; fees included)</span>
+              <span>{t('checkout.totalInclTax')}</span>
               <span>{formatMoney(selected.totalPerUnitCents * quantity, selected.currency)}</span>
             </div>
 
             <div className="stack-sm tiny subtle">
               <span className="row" style={{ gap: 6 }}>
-                <span aria-hidden>🔒</span> Payments encrypted end to end
+                <span aria-hidden>🔒</span> {t('checkout.securePayment')}
               </span>
               <span className="row" style={{ gap: 6 }}>
-                <span aria-hidden>↩</span> Free cancellation up to {product.cancellationPolicy?.freeCancelHours ?? 24}h before
+                <span aria-hidden>↩</span>{' '}
+                {t('checkout.freeCancelUpTo', product.cancellationPolicy?.freeCancelHours ?? 24)}
               </span>
               <span className="row" style={{ gap: 6 }}>
-                <span aria-hidden>📱</span> Instant e-ticket on your phone
+                <span aria-hidden>📱</span> {t('checkout.instantTicket')}
               </span>
             </div>
           </div>

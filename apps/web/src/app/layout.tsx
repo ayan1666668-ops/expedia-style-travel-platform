@@ -1,8 +1,11 @@
-import type { Metadata } from 'next';
-import Link from 'next/link';
+import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { Footer } from '@/components/Footer';
 import { Header } from '@/components/Header';
+import { LocaleSwitcher } from '@/components/LocaleSwitcher';
+import { RealtimeProvider } from '@/components/RealtimeProvider';
+import { resolveServerLocale } from '@/lib/i18n/config';
+import { createTranslator } from '@/lib/i18n/dictionaries';
 
 export const metadata: Metadata = {
   title: {
@@ -17,15 +20,53 @@ export const metadata: Metadata = {
     siteName: 'Voyahub',
     locale: 'en_US',
   },
+  formatDetection: { telephone: false },
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+/**
+ * `viewport-fit=cover` lets the sticky CTA and safe-area padding work on
+ * notched devices; `viewport-fit` alone is not enough without a
+ * `padding-bottom: env(safe-area-inset-bottom)` on the fixed bar.
+ */
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  // Zoom is left enabled on purpose — pinching to read a booking reference or
+  // a QR code is a real need. We prevent *accidental* zoom instead, via
+  // touch-action on interactive controls, rather than capping the scale.
+  maximumScale: 5,
+  viewportFit: 'cover',
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#ffffff' },
+    { media: '(prefers-color-scheme: dark)', color: '#0b1220' },
+  ],
+};
+
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // Resolved per-request on the server so the first paint is already in the
+  // right language — no flash of English before hydration swaps it.
+  const locale = await resolveServerLocale();
+  const t = createTranslator(locale);
+
   return (
-    <html lang="en">
+    <html lang={locale === 'zh' ? 'zh-CN' : 'en'}>
       <body>
-        <Header />
-        <main>{children}</main>
-        <Footer />
+        <a className="skip-link" href="#main">
+          {t('nav.skipToContent')}
+        </a>
+        {/* One realtime connection per tab, shared by the notification centre,
+            the order pages and the operator console. */}
+        <RealtimeProvider>
+          <div className="locale-bar">
+            <div className="container locale-bar-inner">
+              <span className="locale-bar-text">{t('nav.priceNotice')}</span>
+              <LocaleSwitcher locale={locale} />
+            </div>
+          </div>
+          <Header locale={locale} />
+          <main id="main">{children}</main>
+          <Footer locale={locale} />
+        </RealtimeProvider>
       </body>
     </html>
   );

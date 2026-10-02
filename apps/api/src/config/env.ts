@@ -1,9 +1,35 @@
 import { config as loadEnv } from 'dotenv';
-import { resolve } from 'path';
+import { existsSync } from 'fs';
+import { dirname, resolve } from 'path';
 
-// Load the root .env once, so both `tsx` (dev) and `node dist` (prod) see it.
-loadEnv({ path: resolve(__dirname, '../../../.env') });
-loadEnv({ path: resolve(__dirname, '../../.env') });
+/**
+ * Locate the monorepo root .env by walking up from `start`.
+ *
+ * We deliberately do not hard-code `../../../../.env`: under `tsx` the value of
+ * `__dirname` tracks the process working directory rather than the source
+ * layout, and under `node dist` it does the opposite. A hard-coded depth
+ * therefore works for exactly one of the two run modes.
+ *
+ * Getting this wrong is silent — dotenv does not throw on a missing file. It
+ * just leaves DATABASE_URL unset, and the mistake only surfaces much later as a
+ * confusing Prisma "environment variable not found" validation error.
+ */
+function findEnvFile(start: string): string | undefined {
+  let dir = start;
+  for (let depth = 0; depth < 8; depth += 1) {
+    const candidate = resolve(dir, '.env');
+    if (existsSync(candidate)) return candidate;
+    const parent = dirname(dir);
+    if (parent === dir) break; // reached the filesystem root
+    dir = parent;
+  }
+  return undefined;
+}
+
+// Root .env first, then a per-app override if one exists.
+const rootEnv = findEnvFile(__dirname) ?? findEnvFile(process.cwd());
+if (rootEnv) loadEnv({ path: rootEnv });
+loadEnv({ path: resolve(process.cwd(), '.env') });
 
 function str(key: string, fallback = ''): string {
   const value = process.env[key];
@@ -78,7 +104,9 @@ export const config = {
 
   site: {
     url: str('NEXT_PUBLIC_SITE_URL', 'http://localhost:3000'),
-    supportedLocales: ['en-US', 'en-GB', 'fr-FR', 'de-DE', 'es-ES', 'it-IT'],
+    // Simplified Chinese first because the storefront ships an en/zh switcher;
+    // the European locales are here for pricing and tax formatting.
+    supportedLocales: ['zh-CN', 'en-US', 'en-GB', 'fr-FR', 'de-DE', 'es-ES', 'it-IT'],
     defaultLocale: 'en-US',
     defaultMarket: str('DEFAULT_MARKET', 'US'),
   },

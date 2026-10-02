@@ -4,6 +4,7 @@ import { logger } from '../../lib/logger';
 import { formatServiceDate, minutesFromNow, toServiceDate } from '../../utils/date';
 import { AppError } from '../../utils/errors';
 import { generateToken } from '../../utils/ids';
+import { emitInventoryAlert, type InventoryAlertLevel } from '../realtime/notify';
 
 /**
  * ---------------------------------------------------------------------------
@@ -27,6 +28,79 @@ export const TIME_SLOTS = [
   '00:00', '06:00', '08:00', '09:00', '10:00', '11:00', '12:00',
   '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '22:00',
 ] as const;
+
+/**
+ * Remaining units at which a slot starts being reported as scarce.
+ *
+ * Two thresholds, not one: "low" drives the marketing badge on a product page
+ * ("selling fast"), while "critical" is what the operator console escalates.
+ */
+const LOW_STOCK_THRESHOLD = 5;
+const CRITICAL_STOCK_THRESHOLD = 2;
+
+/** Maps an available-unit count onto an alert level, or `null` when healthy. */
+function alertLevel(remaining: number): InventoryAlertLevel | null {
+  if (remaining <= 0) return 'SOLD_OUT';
+  if (remaining <= CRITICAL_STOCK_THRESHOLD) return 'CRITICAL';
+  if (remaining <= LOW_STOCK_THRESHOLD) return 'LOW';
+  return null;
+}
+
+/**
+ * Publishes a stock alert for one (ticket type, date, slot) triple.
+ *
+ * Callers that already know the remaining count pass `knownRemaining` so the
+ * healthy case costs nothing — the authoritative read (and the join that yields
+ * the product name) only happens when an alert is actually going to fire.
+ *
+ * Never throws: a realtime signal must not fail a booking.
+ */
+export async function emitStockAlert(params: {
+  ticketTypeId: string;
+  serviceDate: Date;
+  timeSlot?: string | null;
+  knownRemaining?: number;
+}): Promise<void> {
+  try {
+    if (params.knownRemaining !== undefined && alertLevel(params.knownRemaining) === null) return;
+
+    const record = await prisma.inventoryRecord.findUnique({
+      where: {
+        ticketTypeId_serviceDate_timeSlot: {
+          ticketTypeId: params.ticketTypeId,
+          serviceDate: params.serviceDate,
+          timeSlot: params.timeSlot ?? '',
+        },
+      },
+      include: {
+        ticketType: {
+          select: {
+            productId: true,
+            product: { select: { translations: { take: 1, select: { name: true } } } },
+          },
+        },
+      },
+    });
+    if (!record) return;
+
+    const remaining = Math.max(0, record.capacityTotal - record.capacityHeld - record.capacitySold);
+    const level = alertLevel(remaining);
+    if (!level) return;
+
+    emitInventoryAlert({
+      level,
+      ticketTypeId: params.ticketTypeId,
+      productId: record.ticketType.productId,
+      productName: record.ticketType.product?.translations[0]?.name ?? null,
+      serviceDate: formatServiceDate(record.serviceDate),
+      timeSlot: record.timeSlot || null,
+      remaining,
+      capacityTotal: record.capacityTotal,
+    });
+  } catch (error) {
+    logger.warn('inventory.alert_failed', { reason: (error as Error).message });
+  }
+}
 
 export type HoldRequest = {
   ticketTypeId: string;
@@ -172,6 +246,15 @@ export async function placeHold(request: HoldRequest): Promise<HoldResult> {
     expiresAt: updated.expiresAt.toISOString(),
   });
 
+  // Realtime: `available - quantity` is the post-hold figure, so the alert
+  // needs no extra read unless the slot is actually running out.
+  void emitStockAlert({
+    ticketTypeId,
+    serviceDate,
+    timeSlot,
+    knownRemaining: available - quantity,
+  });
+
   return {
     holdToken: updated.holdToken,
     inventoryRecordId: record.id,
@@ -215,7 +298,12 @@ export async function releaseHold(holdToken: string): Promise<void> {
 
 /** Converts a hold into a sale: held -> sold. Called after payment capture. */
 export async function consumeHold(holdToken: string): Promise<void> {
-  const hold = await prisma.inventoryHold.findUnique({ where: { holdToken } });
+  const hold = await prisma.inventoryHold.findUnique({
+    where: { holdToken },
+    include: {
+      inventoryRecord: { select: { ticketTypeId: true, serviceDate: true, timeSlot: true } },
+    },
+  });
   if (!hold) throw AppError.inventoryExpired('Hold not found');
   if (hold.status === 'CONSUMED') return; // idempotent
   if (hold.status !== 'ACTIVE') throw AppError.inventoryExpired('Hold is no longer active');
@@ -240,6 +328,14 @@ export async function consumeHold(holdToken: string): Promise<void> {
   });
 
   logger.info('inventory.consume', { holdToken, quantity: hold.quantity });
+
+  // Post-sale stock signal — this is the authoritative count, and it is what
+  // turns a product page's "selling fast" badge on without any polling.
+  await emitStockAlert({
+    ticketTypeId: hold.inventoryRecord.ticketTypeId,
+    serviceDate: hold.inventoryRecord.serviceDate,
+    timeSlot: hold.inventoryRecord.timeSlot,
+  });
 }
 
 /**
